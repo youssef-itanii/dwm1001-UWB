@@ -26,7 +26,6 @@
 #include "deca_device_api.h"
 #include "deca_regs.h"
 #include "port_platform.h"
-#include "nrf_log.h"
 
 #define APP_NAME "SS TWR INIT v1.3"
 
@@ -72,8 +71,8 @@ static void resp_msg_get_ts(uint8 *ts_field, uint32 *ts);
 /*Transactions Counters */
 static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
-
-
+static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts, prev_tx_ts, prev_rx_ts;
+static volatile bool isFirstTransmission = true;
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -101,9 +100,7 @@ int ss_init_run(void)
   dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
   tx_count++;
   printf("Transmission # : %d\r\n",tx_count);
-  
-      fputc("1", stdout); // stdout
-  fflush(stdout);
+
 
   /* We assume that the transmission is achieved correctly, poll for reception of a frame or error/timeout. See NOTE 4 below. */
   while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
@@ -143,8 +140,8 @@ int ss_init_run(void)
     if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
     {	
       rx_count++;
-      //printf("Reception # : %d\r\n",rx_count);
-      uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
+      printf("Reception # : %d\r\n",rx_count);
+
       int32 rtd_init, rtd_resp;
       float clockOffsetRatio ;
 
@@ -152,30 +149,39 @@ int ss_init_run(void)
       poll_tx_ts = dwt_readtxtimestamplo32();
       resp_rx_ts = dwt_readrxtimestamplo32();
 
-      /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
-      int32 carrierFreqOffset = dwt_readcarrierintegrator();
-      clockOffsetRatio = carrierFreqOffset * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
 
-      /* Get timestamps embedded in response message. */
-      resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
-      resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
 
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
-      rtd_init = resp_rx_ts - poll_tx_ts;
-      rtd_resp = resp_tx_ts - poll_rx_ts;
+      /* If this is the first transmission avoid computing anything so we can compute the time in the next transmission */
+      if(!isFirstTransmission){
 
-      tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
-      distance = tof * SPEED_OF_LIGHT;
+        /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
+        clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
+        /* Get timestamps embedded in response message. */
+        resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
+        resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
 
-
-      printf("{Sequence: %d, offset: %d ,Distance: %f }\r\n",rx_count,carrierFreqOffset,distance);
+        rtd_init = prev_rx_ts - prev_tx_ts;
+        rtd_resp = resp_tx_ts - poll_rx_ts;
+      
+        tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
+        distance = tof * SPEED_OF_LIGHT;
+        printf("{Distance : %f}\r\n",distance);
+      }
+      else {
+        isFirstTransmission = false;
+        printf("First Transmission. \r\n",distance);
+      }
+            /* Store T0 & T3 to use in the next computation */
+      prev_rx_ts = resp_rx_ts;
+      prev_tx_ts = poll_tx_ts;
     }
   }
   else
   {
     /* Clear RX error/timeout events in the DW1000 status register. */
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
-      NRF_LOG_INFO("Function returned error code ");
+
     /* Reset RX to properly reinitialise LDE operation. */
     dwt_rxreset();
   }
