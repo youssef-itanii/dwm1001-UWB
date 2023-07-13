@@ -89,6 +89,7 @@ static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
 static volatile bool isFirstTransmission = true;
 static volatile bool normalMode = false;
+static int prev_rx_seq_number;
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -136,6 +137,8 @@ int ss_resp_run(void)
 
     /* Check that the frame is a poll sent by "SS TWR initiator" example.
     * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
+    //rx_buffer[ALL_MSG_SN_IDX] = 0;
+    int rx_seq_number = rx_buffer[ALL_MSG_SN_IDX];
     rx_buffer[ALL_MSG_SN_IDX] = 0;
     if (memcmp(rx_buffer, rx_poll_msg, ALL_MSG_COMMON_LEN) == 0)
     {
@@ -150,14 +153,16 @@ int ss_resp_run(void)
         dwt_setdelayedtrxtime(resp_tx_time);
 
     
+      bool seq_number_isValid = (((rx_seq_number - 1)%256 == prev_rx_seq_number) || rx_seq_number == 0 && prev_rx_seq_number == 255);
+
       /* If first transmission/normal mode then compute the transmission time normally & use the current response time */
-      if(isFirstTransmission || normalMode){
+      if(isFirstTransmission || normalMode || (!normalMode && !seq_number_isValid)){
       /* Response TX timestamp is the transmission time we programmed plus the antenna delay. */
         resp_tx_ts = (((uint64)(resp_tx_time & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
         rx_ts_prev = rx_ts_current;
- 
         isFirstTransmission = false;
       }
+
    
       /* Write all timestamps in the final message. See NOTE 8 below. */
       resp_msg_set_ts(&tx_resp_msg[RESP_MSG_POLL_RX_TS_IDX], rx_ts_prev);
@@ -184,6 +189,7 @@ int ss_resp_run(void)
         /*if not in normal mode, then store the current transmission time, and the current response time to send in the next transmission  */
           resp_tx_ts = dwt_readtxtimestamplo32();
           rx_ts_prev = rx_ts_current;
+          prev_rx_seq_number = rx_seq_number;
       }
       /* Clear TXFRS event. */
       dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);

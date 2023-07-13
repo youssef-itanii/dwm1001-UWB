@@ -73,6 +73,7 @@ static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
 static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts, prev_tx_ts, prev_rx_ts;
 static volatile bool isFirstTransmission = true;
+static int prev_rx_seq_number;
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -136,7 +137,10 @@ int ss_init_run(void)
 
     /* Check that the frame is the expected response from the companion "SS TWR responder" example.
     * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
+    int rx_seq_number = rx_buffer[ALL_MSG_SN_IDX];
     rx_buffer[ALL_MSG_SN_IDX] = 0;
+     bool seq_number_isValid = (((rx_seq_number - 1)%256 == prev_rx_seq_number) || rx_seq_number == 0 && prev_rx_seq_number == 255);
+
     if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
     {	
       rx_count++;
@@ -153,7 +157,7 @@ int ss_init_run(void)
 
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
       /* If this is the first transmission avoid computing anything so we can compute the time in the next transmission */
-      if(!isFirstTransmission){
+      if(!isFirstTransmission && seq_number_isValid){
 
         /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
         clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
@@ -166,7 +170,7 @@ int ss_init_run(void)
       
         tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
         distance = tof * SPEED_OF_LIGHT;
-        printf("{Distance : %f}\r\n",distance);
+        printf("Distance : %f\r\n",distance);
       }
       else {
         isFirstTransmission = false;
@@ -175,6 +179,7 @@ int ss_init_run(void)
             /* Store T0 & T3 to use in the next computation */
       prev_rx_ts = resp_rx_ts;
       prev_tx_ts = poll_tx_ts;
+      prev_rx_seq_number = rx_seq_number;
     }
   }
   else
