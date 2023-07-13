@@ -73,6 +73,7 @@ static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
 static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts, prev_tx_ts, prev_rx_ts;
 static volatile bool isFirstTransmission = true;
+static volatile bool normalMode = true;
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -148,12 +149,15 @@ int ss_init_run(void)
       /* Retrieve poll transmission and response reception timestamps. See NOTE 5 below. */
       poll_tx_ts = dwt_readtxtimestamplo32();
       resp_rx_ts = dwt_readrxtimestamplo32();
-
+      if(normalMode){
+        prev_rx_ts = resp_rx_ts;
+        prev_tx_ts = poll_tx_ts;
+      }
 
 
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
       /* If this is the first transmission avoid computing anything so we can compute the time in the next transmission */
-      if(!isFirstTransmission){
+      if(!isFirstTransmission || normalMode){
 
         /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
         clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
@@ -173,8 +177,11 @@ int ss_init_run(void)
         printf("First Transmission. \r\n",distance);
       }
             /* Store T0 & T3 to use in the next computation */
-      prev_rx_ts = resp_rx_ts;
-      prev_tx_ts = poll_tx_ts;
+      if(!normalMode){
+
+        prev_rx_ts = resp_rx_ts;
+        prev_tx_ts = poll_tx_ts;
+      }
     }
   }
   else

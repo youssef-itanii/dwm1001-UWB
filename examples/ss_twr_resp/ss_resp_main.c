@@ -88,7 +88,7 @@ static uint64 resp_tx_ts_manual;
 static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
 static volatile bool isFirstTransmission = true;
-static volatile bool normalMode = false;
+static volatile bool normalMode = true;
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
