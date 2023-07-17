@@ -26,7 +26,7 @@
 #include "deca_device_api.h"
 #include "deca_regs.h"
 #include "port_platform.h"
-
+#include  "./libraries/response_queue/response_queue.h"
 #define APP_NAME "SS TWR INIT v1.3"
 
 /* Inter-ranging delay period, in milliseconds. */
@@ -39,8 +39,10 @@ static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE
 #define ALL_MSG_COMMON_LEN 10
 /* Indexes to access some of the fields in the frames defined above. */
 #define ALL_MSG_SN_IDX 2
-#define RESP_MSG_TM_ID_1 7
-#define RESP_MSG_TM_ID_2 8
+#define RESP_MSG_DST_ID_1 5
+#define RESP_MSG_DST_ID_2 6
+#define RESP_MSG_SRC_ID_1 7
+#define RESP_MSG_SRC_ID_2 8
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
 #define RESP_MSG_TS_LEN 4
@@ -76,8 +78,10 @@ static volatile int rx_count = 0 ; // Successful receive counter
 static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts, prev_tx_ts, prev_rx_ts;
 static volatile bool isFirstTransmission = true;
 static volatile bool normalMode = false;
-
+static Response_Queue resp_queue;
 void get_transmitter_id(const uint8* buffer , char* id);
+
+extern void initializeQueue(Response_Queue* queue);
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -87,7 +91,7 @@ void get_transmitter_id(const uint8* buffer , char* id);
 *
 * @return none
 */
-int ss_init_run(void)
+int ss_init_run(char dst_id1 , char dst_id2)
 {
 
 
@@ -96,10 +100,12 @@ int ss_init_run(void)
 
   /* Write frame data to DW1000 and prepare transmission. See NOTE 3 below. */
   tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
+  tx_poll_msg[RESP_MSG_DST_ID_1] = (uint8) dst_id1;
+  tx_poll_msg[RESP_MSG_DST_ID_2] = (uint8) dst_id2;
   dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
+
   dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0); /* Zero offset in TX buffer. */
   dwt_writetxfctrl(sizeof(tx_poll_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
-
   /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
   * set by dwt_setrxaftertxdelay() has elapsed. */
   dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
@@ -144,9 +150,17 @@ int ss_init_run(void)
     int seq_num = rx_buffer[ALL_MSG_SN_IDX];
     rx_buffer[ALL_MSG_SN_IDX] = 0;
 
+
     //if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
     if(sizeof(rx_resp_msg) == sizeof(rx_buffer))
     {	
+
+      /* Get transmitter node's ID */
+      char transmitter_id[3];
+      get_transmitter_id(rx_buffer , transmitter_id );
+
+      //tx_poll_msg[RESP_MSG_DST_ID_1] = rx_buffer[RESP_MSG_SRC_ID_1];
+      //tx_poll_msg[RESP_MSG_DST_ID_2] = rx_buffer[RESP_MSG_SRC_ID_2];
       rx_count++;
       //printf("Reception # : %d\r\n",rx_count);
 
@@ -164,8 +178,8 @@ int ss_init_run(void)
         prev_rx_ts = resp_rx_ts;
         prev_tx_ts = poll_tx_ts;
       }
-      char transmitter_id[3];
-      get_transmitter_id(rx_buffer , transmitter_id);
+
+
 
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
       /* If this is the first transmission avoid computing anything so we can compute the time in the next transmission */
@@ -182,20 +196,20 @@ int ss_init_run(void)
         tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
         distance = tof * SPEED_OF_LIGHT;
   
-        printf("{'ID': %s , 'Data':{'Distance_m' : %f , 'CFO': %d , 'Resp_delay': %d }}\r\n",id, distance , cfo , rtd_resp);
+        printf("{'ID': %s , 'Data':{'Distance_m' : %f , 'CFO': %d , 'Resp_delay': %d }}\r\n",transmitter_id, distance , cfo , rtd_resp);
         
       }
       else {
         isFirstTransmission = false;
         printf("First Transmission. \r\n",distance);
       }
-            /* Store T0 & T3 to use in the next computation */
+      /* Store T0 & T3 to use in the next computation */
       if(!normalMode){
 
         prev_rx_ts = resp_rx_ts;
         prev_tx_ts = poll_tx_ts;
       }
-      free(id);
+
     }
   }
   else
@@ -217,12 +231,64 @@ int ss_init_run(void)
 void get_transmitter_id(const uint8* buffer , char* id){
       uint32 id_byte_1;
       uint32 id_byte_2;
-      resp_msg_get_ts(&rx_buffer[RESP_MSG_TM_ID_1], &id_byte_1);
-      resp_msg_get_ts(&rx_buffer[RESP_MSG_TM_ID_2], &id_byte_2);
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_SRC_ID_1], &id_byte_1);
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_SRC_ID_2], &id_byte_2);
       id[0] = (char)id_byte_1;
       id[1] = (char)id_byte_2;
       id[2] = '\0';
 }
+
+void ss_initator_node_task_function(void){
+  dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
+  printf("waiting for new frame");
+  while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
+  {};
+  printf("Receieved a frame from address");
+      /* Clear RX error/timeout events in the DW1000 status register. */
+
+
+  if (status_reg & SYS_STATUS_RXFCG)
+  {		
+    uint32 frame_len;
+
+    /* Clear good RX frame event in the DW1000 status register. */
+    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG);
+
+    /* A frame has been received, read it into the local buffer. */
+    frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFLEN_MASK;
+   
+    if (frame_len <= RX_BUF_LEN)
+    {
+      dwt_readrxdata(rx_buffer, frame_len, 0);
+    }
+
+    /* Check that the frame is the expected response from the companion "SS TWR responder" example.
+    * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
+    int seq_num = rx_buffer[ALL_MSG_SN_IDX];
+    rx_buffer[ALL_MSG_SN_IDX] = 0;
+
+
+    //if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
+    if(sizeof(rx_resp_msg) == sizeof(rx_buffer))
+    {	
+
+      /* Get transmitter node's ID */
+      char transmitter_id[3];
+      get_transmitter_id(rx_buffer , transmitter_id );
+
+    }
+  }
+  else
+  {
+    /* Clear RX error/timeout events in the DW1000 status register. */
+    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
+
+    /* Reset RX to properly reinitialise LDE operation. */
+
+    dwt_rxreset();
+  }
+}
+
 
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn resp_msg_get_ts()
@@ -246,6 +312,7 @@ static void resp_msg_get_ts(uint8 *ts_field, uint32 *ts)
 }
 
 
+
 /**@brief SS TWR Initiator task entry function.
 *
 * @param[in] pvParameter   Pointer that will be used as the parameter for the task.
@@ -257,10 +324,11 @@ void ss_initiator_task_function (void * pvParameter)
   //dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
 
   dwt_setleds(DWT_LEDS_ENABLE);
-
+  initializeQueue(&resp_queue);
   while (true)
   {
-    ss_init_run();
+  ss_initator_node_task_function();
+    //ss_init_run('W','B');
     /* Delay a task for a given number of ticks */
     vTaskDelay(RNG_DELAY_MS);
     /* Tasks must be implemented to never return... */

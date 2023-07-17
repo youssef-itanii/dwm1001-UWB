@@ -35,7 +35,7 @@
 #include "deca_regs.h"
 #include "deca_device_api.h"
 #include "UART.h"
-	
+
 //-----------------dw1000----------------------------
 
 static dwt_config_t config = {
@@ -72,6 +72,8 @@ static dwt_config_t config = {
 TaskHandle_t  ss_initiator_task_handle;   /**< Reference to SS TWR Initiator FreeRTOS task. */
 extern void ss_initiator_task_function (void * pvParameter);
 TaskHandle_t  led_toggle_task_handle;   /**< Reference to LED0 toggling FreeRTOS task. */
+TaskHandle_t node_addition_task_handle; /**< Reference to the new node addition task */
+extern void ss_initator_node_task_function;
 TimerHandle_t led_toggle_timer_handle;  /**< Reference to LED1 toggling FreeRTOS timer. */
 #endif
 
@@ -80,7 +82,7 @@ TimerHandle_t led_toggle_timer_handle;  /**< Reference to LED1 toggling FreeRTOS
 /**@brief LED0 task entry function.
  *
  * @param[in] pvParameter   Pointer that will be used as the parameter for the task.
- */
+ */ 
 static void led_toggle_task_function (void * pvParameter)
 {
   UNUSED_PARAMETER(pvParameter);
@@ -104,7 +106,7 @@ static void led_toggle_timer_callback (void * pvParameter)
 }
 #else
 
-  extern int ss_init_run(void);
+  extern int ss_init_run(char dst_id1 , char dst_id2);
 
 #endif   // #ifdef USE_FREERTOS
 
@@ -124,6 +126,8 @@ int main(void)
 
     /* Create task for SS TWR Initiator set to 2 */
     UNUSED_VARIABLE(xTaskCreate(ss_initiator_task_function, "SSTWR_INIT", configMINIMAL_STACK_SIZE + 200, NULL, 2, &ss_initiator_task_handle));
+
+    //UNUSED_VARIABLE(xTaskCreate(ss_initator_node_task_function, "SSTWR_NODE_ADDITION", configMINIMAL_STACK_SIZE + 200, NULL, 2, &node_addition_task_handle));
   #endif // #ifdef USE_FREERTOS
   
   //-------------dw1000  ini------------------------------------	
@@ -181,7 +185,8 @@ int main(void)
     // Loop forever responding to ranging requests.
     while (1)
     {
-      ss_init_run();
+      
+      ();
     }
 
   #endif
