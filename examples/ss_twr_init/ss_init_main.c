@@ -73,7 +73,7 @@ static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
 static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts, prev_tx_ts, prev_rx_ts;
 static volatile bool isFirstTransmission = true;
-static volatile bool normalMode = true;
+static volatile bool normalMode = false;
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -137,11 +137,13 @@ int ss_init_run(void)
 
     /* Check that the frame is the expected response from the companion "SS TWR responder" example.
     * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
+    int seq_num = rx_buffer[ALL_MSG_SN_IDX];
     rx_buffer[ALL_MSG_SN_IDX] = 0;
+
     if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
     {	
       rx_count++;
-      printf("Reception # : %d\r\n",rx_count);
+      //printf("Reception # : %d\r\n",rx_count);
 
       int32 rtd_init, rtd_resp;
       float clockOffsetRatio ;
@@ -160,7 +162,8 @@ int ss_init_run(void)
       if(!isFirstTransmission || normalMode){
 
         /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
-        clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
+        int32 cfo = dwt_readcarrierintegrator();
+        clockOffsetRatio = cfo * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
         /* Get timestamps embedded in response message. */
         resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
         resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
@@ -170,7 +173,7 @@ int ss_init_run(void)
       
         tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
         distance = tof * SPEED_OF_LIGHT;
-        printf("{Distance : %f}\r\n",distance);
+        printf("{'Reception': %d , 'Data':{'Distance_m' : %f , 'CFO': %d , 'Resp_delay': %d }}\r\n",rx_count , distance , cfo , rtd_resp);
       }
       else {
         isFirstTransmission = false;
