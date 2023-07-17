@@ -39,6 +39,8 @@ static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE
 #define ALL_MSG_COMMON_LEN 10
 /* Indexes to access some of the fields in the frames defined above. */
 #define ALL_MSG_SN_IDX 2
+#define RESP_MSG_TM_ID_1 7
+#define RESP_MSG_TM_ID_2 8
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
 #define RESP_MSG_TS_LEN 4
@@ -74,6 +76,8 @@ static volatile int rx_count = 0 ; // Successful receive counter
 static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts, prev_tx_ts, prev_rx_ts;
 static volatile bool isFirstTransmission = true;
 static volatile bool normalMode = false;
+
+void get_transmitter_id(const uint8* buffer , char* id);
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -140,7 +144,8 @@ int ss_init_run(void)
     int seq_num = rx_buffer[ALL_MSG_SN_IDX];
     rx_buffer[ALL_MSG_SN_IDX] = 0;
 
-    if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
+    //if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
+    if(sizeof(rx_resp_msg) == sizeof(rx_buffer))
     {	
       rx_count++;
       //printf("Reception # : %d\r\n",rx_count);
@@ -151,11 +156,16 @@ int ss_init_run(void)
       /* Retrieve poll transmission and response reception timestamps. See NOTE 5 below. */
       poll_tx_ts = dwt_readtxtimestamplo32();
       resp_rx_ts = dwt_readrxtimestamplo32();
+
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
+
       if(normalMode){
         prev_rx_ts = resp_rx_ts;
         prev_tx_ts = poll_tx_ts;
       }
-
+      char transmitter_id[3];
+      get_transmitter_id(rx_buffer , transmitter_id);
 
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
       /* If this is the first transmission avoid computing anything so we can compute the time in the next transmission */
@@ -165,15 +175,15 @@ int ss_init_run(void)
         int32 cfo = dwt_readcarrierintegrator();
         clockOffsetRatio = cfo * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
         /* Get timestamps embedded in response message. */
-        resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
-        resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
-
+        
         rtd_init = prev_rx_ts - prev_tx_ts;
         rtd_resp = resp_tx_ts - poll_rx_ts;
       
         tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
         distance = tof * SPEED_OF_LIGHT;
-        printf("{'Reception': %d , 'Data':{'Distance_m' : %f , 'CFO': %d , 'Resp_delay': %d }}\r\n",rx_count , distance , cfo , rtd_resp);
+  
+        printf("{'ID': %s , 'Data':{'Distance_m' : %f , 'CFO': %d , 'Resp_delay': %d }}\r\n",id, distance , cfo , rtd_resp);
+        
       }
       else {
         isFirstTransmission = false;
@@ -185,6 +195,7 @@ int ss_init_run(void)
         prev_rx_ts = resp_rx_ts;
         prev_tx_ts = poll_tx_ts;
       }
+      free(id);
     }
   }
   else
@@ -193,6 +204,7 @@ int ss_init_run(void)
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
 
     /* Reset RX to properly reinitialise LDE operation. */
+
     dwt_rxreset();
   }
 
@@ -200,6 +212,16 @@ int ss_init_run(void)
   //     deca_sleep(RNG_DELAY_MS);
 
   //	return(1);
+}
+
+void get_transmitter_id(const uint8* buffer , char* id){
+      uint32 id_byte_1;
+      uint32 id_byte_2;
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_TM_ID_1], &id_byte_1);
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_TM_ID_2], &id_byte_2);
+      id[0] = (char)id_byte_1;
+      id[1] = (char)id_byte_2;
+      id[2] = '\0';
 }
 
 /*! ------------------------------------------------------------------------------------------------------------------
