@@ -46,6 +46,7 @@
     <folder Name="::Device" />
     <folder Name="Application">
       <file file_name="../main.c" />
+      <file file_name="response_queue.c" />
       <file file_name="../ss_init_main.c" />
     </folder>
     <folder Name="Board Definition">

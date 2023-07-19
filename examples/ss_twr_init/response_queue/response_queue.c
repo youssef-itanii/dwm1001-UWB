@@ -17,7 +17,7 @@ int isQueueFull(Response_Queue* queue) {
     return queue->size == MAX_QUEUE_SIZE;
 }
 
-void enqueue(Response_Queue* queue, const char* item) {
+void enqueue(Response_Queue* queue, char* item) {
     if (isQueueFull(queue)) {
         printf("Queue is full. Unable to enqueue.\n");
         return;
@@ -29,6 +29,7 @@ void enqueue(Response_Queue* queue, const char* item) {
     queue->rear = (queue->rear + 1) % MAX_QUEUE_SIZE;
     queue->elements[queue->rear] = array;
     queue->size++;
+    printf("New id: %s has been added. Size of queue: %d" , item , queue->size);
 }
 
 char* dequeue(Response_Queue* queue) {

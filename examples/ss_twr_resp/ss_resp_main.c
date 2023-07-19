@@ -137,7 +137,8 @@ int ss_resp_run(void)
     /* Check that the frame is a poll sent by "SS TWR initiator" example.
     * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
     rx_buffer[ALL_MSG_SN_IDX] = 0;
-    if (memcmp(rx_buffer, rx_poll_msg, ALL_MSG_COMMON_LEN) == 0)
+    //if (memcmp(rx_buffer, rx_poll_msg, ALL_MSG_COMMON_LEN) == 0)
+    if(sizeof(rx_buffer) == sizeof(rx_poll_msg))
     {
       uint32 resp_tx_time;
       int ret;

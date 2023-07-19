@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #define MAX_QUEUE_SIZE 5
-#define ARRAY_SIZE 10
+#define ARRAY_SIZE 4
 
 typedef struct {
     char* data;
@@ -20,8 +20,8 @@ typedef struct {
 void initializeQueue(Response_Queue* queue);
 int isQueueEmpty(Response_Queue* queue);
 int isQueueFull(Response_Queue* queue);
-void enqueue(Response_Queue* queue, Array* item);
-Array* dequeue(Response_Queue* queue);
+void enqueue(Response_Queue* queue, char* item);
+char* dequeue(Response_Queue* queue);
 
 #endif /* RESPONSE_QUEUE_H */
 

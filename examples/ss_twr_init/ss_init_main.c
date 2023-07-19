@@ -26,7 +26,7 @@
 #include "deca_device_api.h"
 #include "deca_regs.h"
 #include "port_platform.h"
-#include  "./libraries/response_queue/response_queue.h"
+#include  "util/response_queue.h"
 #define APP_NAME "SS TWR INIT v1.3"
 
 /* Inter-ranging delay period, in milliseconds. */
@@ -240,17 +240,17 @@ void get_transmitter_id(const uint8* buffer , char* id){
 
 void ss_initator_node_task_function(void){
   dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
-  printf("waiting for new frame");
   while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
   {};
-  printf("Receieved a frame from address");
-      /* Clear RX error/timeout events in the DW1000 status register. */
 
+  
+      /* Clear RX error/timeout events in the DW1000 status register. */
+  
 
   if (status_reg & SYS_STATUS_RXFCG)
   {		
     uint32 frame_len;
-
+  printf("New frame\n");
     /* Clear good RX frame event in the DW1000 status register. */
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG);
 
@@ -275,6 +275,7 @@ void ss_initator_node_task_function(void){
       /* Get transmitter node's ID */
       char transmitter_id[3];
       get_transmitter_id(rx_buffer , transmitter_id );
+      enqueue(&resp_queue , transmitter_id);
 
     }
   }
