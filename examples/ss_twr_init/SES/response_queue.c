@@ -23,7 +23,11 @@ void enqueue(Response_Queue* queue, char* item) {
         printf("Queue is full. Unable to enqueue.\n");
         return;
     }
-  printf("here");
+    if (isItemInQueue(queue, item)) {
+        //printf("Item \"%s\" already exists in the queue. Skipping...\n", item);
+        return;
+    }
+
 
     Array* array = (Array*)malloc(sizeof(Array));
     array->data = strdup(item);
@@ -48,4 +52,16 @@ char* dequeue(Response_Queue* queue) {
     free(item);
 
     return data;
+}
+
+
+bool isItemInQueue(Response_Queue* queue, char* item) {
+    for (int i = 0; i < queue->size; i++) {
+        int index = (queue->front + i) % MAX_QUEUE_SIZE;
+        char* data = queue->elements[index]->data;
+        if (data == item) {
+            return true;
+        }
+    }
+    return false;
 }

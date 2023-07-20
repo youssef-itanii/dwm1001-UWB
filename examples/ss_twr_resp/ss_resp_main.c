@@ -26,18 +26,21 @@
 #include "deca_regs.h"
 #include "port_platform.h"
 
+
 /* Inter-ranging delay period, in milliseconds. See NOTE 1*/
 #define RNG_DELAY_MS 80
 
 /* Frames used in the ranging process. See NOTE 2,3 below. */
-static uint8 rx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'B', 'V', 'E', 0xE0, 0, 0};
-static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'B', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+static uint8 rx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, '_', '_', 'V', 'E', 0xE0, 0, 0 , 0 , 0};
+static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', '_', '_', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
 #define ALL_MSG_COMMON_LEN 10
 
 /* Index to access some of the fields in the frames involved in the process. */
 #define ALL_MSG_SN_IDX 2
+#define RESP_MSG_SRC_ID_1 7
+#define RESP_MSG_SRC_ID_2 8
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
 #define RESP_MSG_TS_LEN 4	
@@ -47,7 +50,7 @@ static uint8 frame_seq_nb = 0;
 
 /* Buffer to store received response message.
 * Its size is adjusted to longest frame that this example code is supposed to handle. */
-#define RX_BUF_LEN 24
+#define RX_BUF_LEN 14
 static uint8 rx_buffer[RX_BUF_LEN];
 
 /* Hold copy of status register state here for reference so that it can be examined at a debug breakpoint. */
@@ -89,7 +92,14 @@ static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
 static volatile bool isFirstTransmission = true;
 static volatile bool normalMode = false;
+
+
+
+
+
+
 /*! ------------------------------------------------------------------------------------------------------------------
+
 * @fn main()
 *
 * @brief Application entry point.
@@ -220,6 +230,41 @@ int ss_resp_run(void)
   return(1);		
 }
 
+
+void get_id(char* id){
+      id[0] = (char)tx_resp_msg[RESP_MSG_SRC_ID_1];
+      id[1] = (char)tx_resp_msg[RESP_MSG_SRC_ID_2];  
+      id[2] = '\0';
+}
+
+
+char generate_random_char() {
+    // Generate a random number between 0 and 51
+    int rand_number = rand() % 52;
+
+    // Determine whether to generate a lowercase or uppercase letter
+    char random_char;
+    if (rand_number < 26) {
+        // Generate a lowercase letter
+        random_char = 'a' + rand_number;
+    } else {
+        // Generate an uppercase letter
+        random_char = 'A' + (rand_number - 26);
+    }
+
+    return random_char;
+}
+
+void generate_id() {  
+
+
+    tx_resp_msg[RESP_MSG_SRC_ID_1] = (uint8)(generate_random_char());
+         //srand((unsigned int)&normalMode);
+    tx_resp_msg[RESP_MSG_SRC_ID_2] = (uint8) (generate_random_char());
+    char id[3];
+    get_id(id);
+    printf("ID Generated %s \n", id );
+}
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn get_rx_timestamp_u64()
 *
@@ -244,49 +289,110 @@ static uint64 get_rx_timestamp_u64(void)
   return ts;
 }
 
+static bool id_changed(){
+  printf("checking id\r\n");
+  printf("%c , %c" , (char)tx_resp_msg[RESP_MSG_SRC_ID_1] , (char)tx_resp_msg[RESP_MSG_SRC_ID_2] );
+  return tx_resp_msg[RESP_MSG_SRC_ID_1] != '_' &&  tx_resp_msg[RESP_MSG_SRC_ID_2] != '_';
+}
+
 static void transmit_address(void){
-int ret;
-   /* Write and send the response message. See NOTE 9 below. */
+      int ret;
+      /* Write and send the response message. See NOTE 9 below. */
       tx_resp_msg[ALL_MSG_SN_IDX] = 0;
+
       dwt_writetxdata(sizeof(tx_resp_msg), tx_resp_msg, 0); /* Zero offset in TX buffer. See Note 5 below.*/
       dwt_writetxfctrl(sizeof(tx_resp_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
-      ret = dwt_starttx(DWT_START_TX_DELAYED);
 
-      //ret = dwt_starttx(DWT_START_TX_IMMEDIATE);
+       tx_resp_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
+      //ret = dwt_starttx(imm);
+      printf("Starting transmission of ID \n");
+      ret = dwt_starttx(DWT_START_TX_IMMEDIATE);
 
-      /* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. */
       if (ret == DWT_SUCCESS)
       {
-        /* Poll DW1000 until TX frame sent event set. See NOTE 5 below. */
+        printf("Ranging Session starting... \n");
+
         while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS))
         {};
       
       
-        if(!normalMode){  
-        /*if not in normal mode, then store the current transmission time, and the current response time to send in the next transmission  */
-          resp_tx_ts = dwt_readtxtimestamplo32();
-          rx_ts_prev = rx_ts_current;
-      }
-      /* Clear TXFRS event. */
-      dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
 
-      /* Increment frame sequence number after transmission of the poll message (modulo 256). */
-      frame_seq_nb++;
+        printf("Sending ID... \n");
+        /* Clear TXFRS event. */
+        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
+
+        printf("Waiting for new ID...\r\n");
+        frame_seq_nb++;
+        dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
+
+        while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
+            {};
+
+  
+          /* Clear RX error/timeout events in the DW1000 status register. */
+  
+
+        if (status_reg & SYS_STATUS_RXFCG)
+        {		
+          uint32 frame_len;
+
+          /* Clear good RX frame event in the DW1000 status register. */
+          dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG);
+
+          /* A frame has been received, read it into the local buffer. */
+          frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFLEN_MASK;
+   
+          if (frame_len <= RX_BUF_LEN)
+          {
+            dwt_readrxdata(rx_buffer, frame_len, 0);
+          }
+
+          /* Check that the frame is the expected response from the companion "SS TWR responder" example.
+          * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
+          int seq_num = rx_buffer[ALL_MSG_SN_IDX];
+          rx_buffer[ALL_MSG_SN_IDX] = 0;
+
+
+          //if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
+          printf("Checking validity of message...\r\n");
+          printf("Size of poll msg %d vs size of buffer %d\r\n", sizeof(rx_poll_msg) , sizeof(rx_buffer));
+          if(sizeof(rx_poll_msg) == sizeof(rx_buffer))
+          {	
+
+            ///* Get transmitter node's ID */
+            //char transmitter_id[3];
+            //get_transmitter_id(rx_buffer , transmitter_id );
+            //enqueue(&resp_queue , transmitter_id);
+            printf("Message is valid... \r\n");
+            char id1 = rx_buffer[13];
+            char id2 = rx_buffer[14];
+            tx_resp_msg[RESP_MSG_SRC_ID_1] = rx_buffer[13];
+            tx_resp_msg[RESP_MSG_SRC_ID_2] = rx_buffer[14];
+            printf("NEW IDS %c,%c \r\n",id1,id2);
+        }
       }
       else
       {
-        /* If we end up in here then we have not succeded in transmitting the packet we sent up.
-        POLL_RX_TO_RESP_TX_DLY_UUS is a critical value for porting to different processors. 
-        For slower platforms where the SPI is at a slower speed or the processor is operating at a lower 
-        frequency (Comparing to STM32F, SPI of 18MHz and Processor internal 72MHz)this value needs to be increased.
-        Knowing the exact time when the responder is going to send its response is vital for time of flight 
-        calculation. The specification of the time of respnse must allow the processor enough time to do its 
-        calculations and put the packet in the Tx buffer. So more time is required for a slower system(processor).
-        */
+        /* Clear RX error/timeout events in the DW1000 status register. */
+        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
 
         /* Reset RX to properly reinitialise LDE operation. */
+
         dwt_rxreset();
       }
+
+      }
+      else
+      {
+        dwt_rxreset();
+      }
+
+
+
+
+
+      
+ 
 }
 
 /*! ------------------------------------------------------------------------------------------------------------------
@@ -318,8 +424,11 @@ void ss_responder_task_function (void * pvParameter)
 {
   UNUSED_PARAMETER(pvParameter);
 
-  dwt_setleds(DWT_LEDS_ENABLE);
-  transmit_address();
+  //generate_id();
+  while(!id_changed()){
+    printf("Id is the same\r\n");
+    transmit_address();
+    }
   while (true)
   {
     ss_resp_run();

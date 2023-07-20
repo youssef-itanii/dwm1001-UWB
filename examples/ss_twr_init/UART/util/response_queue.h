@@ -2,7 +2,7 @@
 #define RESPONSE_QUEUE_H
 
 #include <stdint.h>
-
+#include <stdbool.h>
 #define MAX_QUEUE_SIZE 5
 #define ARRAY_SIZE 4
 
@@ -22,6 +22,6 @@ int isQueueEmpty(Response_Queue* queue);
 int isQueueFull(Response_Queue* queue);
 void enqueue(Response_Queue* queue, char* item);
 char* dequeue(Response_Queue* queue);
-
+bool isItemInQueue(Response_Queue* queue, char* item);
 #endif /* RESPONSE_QUEUE_H */
 

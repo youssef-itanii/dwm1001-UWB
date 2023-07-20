@@ -33,7 +33,7 @@
 #define RNG_DELAY_MS 100
 
 /* Frames used in the ranging process. See NOTE 1,2 below. */
-static uint8 tx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
+static uint8 tx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0 , 0 , 0};
 static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 /* Length of the common part of the message (up to and including the function code, see NOTE 1 below). */
 #define ALL_MSG_COMMON_LEN 10
@@ -79,9 +79,15 @@ static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts, prev_tx_ts, prev_r
 static volatile bool isFirstTransmission = true;
 static volatile bool normalMode = false;
 static Response_Queue resp_queue;
+static uint8 id1 = 'a';
+static uint8 id2 = 'a';
+
+
 void get_transmitter_id(const uint8* buffer , char* id);
+void update_id();
 
 extern void initializeQueue(Response_Queue* queue);
+static void transmit_id(char* id);
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -234,7 +240,7 @@ void get_transmitter_id(const uint8* buffer , char* id){
       resp_msg_get_ts(&rx_buffer[RESP_MSG_SRC_ID_1], &id_byte_1);
       resp_msg_get_ts(&rx_buffer[RESP_MSG_SRC_ID_2], &id_byte_2);
       id[0] = (char)id_byte_1;
-      id[1] = (char)id_byte_2;
+      id[1] = (char)id_byte_2;  
       id[2] = '\0';
 }
 
@@ -250,7 +256,7 @@ void ss_initator_node_task_function(void){
   if (status_reg & SYS_STATUS_RXFCG)
   {		
     uint32 frame_len;
-  printf("New frame\n");
+    printf("New frame\n");
     /* Clear good RX frame event in the DW1000 status register. */
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG);
 
@@ -269,14 +275,15 @@ void ss_initator_node_task_function(void){
 
 
     //if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
-    if(sizeof(rx_resp_msg) == sizeof(rx_buffer))
+    if(sizeof(rx_resp_msg) == sizeof(rx_buffer) &&  ( rx_buffer[RESP_MSG_SRC_ID_1] == '_' &&  rx_buffer[RESP_MSG_SRC_ID_2] == '_'))
     {	
 
       /* Get transmitter node's ID */
       char transmitter_id[3];
-      get_transmitter_id(rx_buffer , transmitter_id );
+      printf("Generating new ID for new node\r\n");
+      //get_transmitter_id(rx_buffer , transmitter_id );
+      transmit_id(transmitter_id);
       enqueue(&resp_queue , transmitter_id);
-
     }
   }
   else
@@ -288,9 +295,62 @@ void ss_initator_node_task_function(void){
 
     dwt_rxreset();
   }
+
+
 }
 
 
+static void transmit_id(char* id){
+      int ret;
+      /* Write and send the response message. See NOTE 9 below. */
+      tx_poll_msg[ALL_MSG_SN_IDX] = 0;
+      printf("Assigned ID %c,%c to new node\r\n" , id1, id2);
+      tx_poll_msg[13] = id1;
+      tx_poll_msg[14] = id2;
+  
+
+      dwt_writetxdata(sizeof(tx_poll_msg), tx_poll_msg, 0); /* Zero offset in TX buffer. See Note 5 below.*/
+      dwt_writetxfctrl(sizeof(tx_poll_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
+
+      tx_poll_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
+      //ret = dwt_starttx(imm);
+      ret = dwt_starttx(DWT_START_TX_IMMEDIATE);
+
+      if (ret == DWT_SUCCESS)
+      {
+        printf("Starting transmission of ID \n");
+
+        while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS))
+        {};
+    
+        printf("Sending ID... \n");
+        /* Clear TXFRS event. */
+        dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
+
+        printf("Success");
+        frame_seq_nb++;
+        if(id2 > 26){
+          id1++;
+          id2 = 'a';
+        }
+        else{
+          id2++;
+        }
+
+        id[0] = (char)id1;
+        id[1] = (char)id2;  
+        id[2] = '\0';
+      }
+      else
+      {
+        dwt_rxreset();
+      }
+}
+
+//void update_id(void){
+//  if(id1
+
+//}
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn resp_msg_get_ts()
 *
@@ -328,8 +388,12 @@ void ss_initiator_task_function (void * pvParameter)
   initializeQueue(&resp_queue);
   while (true)
   {
-  ss_initator_node_task_function();
-    //ss_init_run('W','B');
+    ss_initator_node_task_function();
+    char* node_address = dequeue(&resp_queue);
+    if(node_address!=NULL) continue;
+
+    ss_init_run(node_address[0],node_address[1]);
+    enqueue(&resp_queue , node_address);  
     /* Delay a task for a given number of ticks */
     vTaskDelay(RNG_DELAY_MS);
     /* Tasks must be implemented to never return... */

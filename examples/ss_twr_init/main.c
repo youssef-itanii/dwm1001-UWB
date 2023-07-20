@@ -73,7 +73,7 @@ TaskHandle_t  ss_initiator_task_handle;   /**< Reference to SS TWR Initiator Fre
 extern void ss_initiator_task_function (void * pvParameter);
 TaskHandle_t  led_toggle_task_handle;   /**< Reference to LED0 toggling FreeRTOS task. */
 TaskHandle_t node_addition_task_handle; /**< Reference to the new node addition task */
-extern void ss_initator_node_task_function;
+extern void ss_initator_node_task_function (void);
 TimerHandle_t led_toggle_timer_handle;  /**< Reference to LED1 toggling FreeRTOS timer. */
 #endif
 
@@ -127,7 +127,7 @@ int main(void)
     /* Create task for SS TWR Initiator set to 2 */
     UNUSED_VARIABLE(xTaskCreate(ss_initiator_task_function, "SSTWR_INIT", configMINIMAL_STACK_SIZE + 200, NULL, 2, &ss_initiator_task_handle));
 
-    //UNUSED_VARIABLE(xTaskCreate(ss_initator_node_task_function, "SSTWR_NODE_ADDITION", configMINIMAL_STACK_SIZE + 200, NULL, 2, &node_addition_task_handle));
+   // UNUSED_VARIABLE(xTaskCreate(ss_initator_node_task_function, "SSTWR_NODE_ADDITION", configMINIMAL_STACK_SIZE + 200, NULL, 2, &node_addition_task_handle));
   #endif // #ifdef USE_FREERTOS
   
   //-------------dw1000  ini------------------------------------	
