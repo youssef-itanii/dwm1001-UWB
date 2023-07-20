@@ -39,6 +39,10 @@ static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE
 #define ALL_MSG_COMMON_LEN 10
 /* Indexes to access some of the fields in the frames defined above. */
 #define ALL_MSG_SN_IDX 2
+#define RESP_MSG_SRC_ID_1 5
+#define RESP_MSG_SRC_ID_2 6
+#define TX_MSG_DST_ID_1 7
+#define TX_MSG_DST_ID_2 8
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
 #define RESP_MSG_TS_LEN 4
@@ -74,6 +78,19 @@ static volatile int rx_count = 0 ; // Successful receive counter
 static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts, prev_tx_ts, prev_rx_ts;
 static volatile bool isFirstTransmission = true;
 static volatile bool normalMode = false;
+
+
+
+
+void get_transmitter_id(const uint8* buffer , char* id){
+      uint32 id_byte_1;
+      uint32 id_byte_2;
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_SRC_ID_1], &id_byte_1);
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_SRC_ID_2], &id_byte_2);
+      id[0] = (char)id_byte_1;
+      id[1] = (char)id_byte_2;
+      id[2] = '\0';
+}
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -140,8 +157,13 @@ int ss_init_run(void)
     int seq_num = rx_buffer[ALL_MSG_SN_IDX];
     rx_buffer[ALL_MSG_SN_IDX] = 0;
 
-    if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
+    //if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
+    if(sizeof(rx_buffer) == sizeof(rx_resp_msg))
     {	
+
+      /* Get transmitter node's ID */
+      char transmitter_id[3];
+      get_transmitter_id(rx_buffer , transmitter_id );
       rx_count++;
       //printf("Reception # : %d\r\n",rx_count);
 
@@ -173,7 +195,7 @@ int ss_init_run(void)
       
         tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
         distance = tof * SPEED_OF_LIGHT;
-        printf("{'Reception': %d , 'Data':{'Distance_m' : %f , 'CFO': %d , 'Resp_delay': %d }}\r\n",rx_count , distance , cfo , rtd_resp);
+        printf("{'ID': %s , 'Data':{'Distance_m' : %f , 'CFO': %d , 'Resp_delay': %d }}\r\n",transmitter_id, distance , cfo , rtd_resp);
       }
       else {
         isFirstTransmission = false;
@@ -235,15 +257,22 @@ void ss_initiator_task_function (void * pvParameter)
   //dwt_setrxtimeout(RESP_RX_TIMEOUT_UUS);
 
   dwt_setleds(DWT_LEDS_ENABLE);
-
+  int ids[2] = {29 , 133};
   while (true)
   {
-    ss_init_run();
-    /* Delay a task for a given number of ticks */
-    vTaskDelay(RNG_DELAY_MS);
-    /* Tasks must be implemented to never return... */
+    for(int i = 0; i < 2; i++){
+        uint8 id = ids[i];
+        tx_poll_msg[TX_MSG_DST_ID_1] = id;
+        rx_resp_msg[RESP_MSG_SRC_ID_1] = id;
+        ss_init_run();
+        /* Delay a task for a given number of ticks */
+        vTaskDelay(RNG_DELAY_MS);
+       /* Tasks must be implemented to never return... */
+     }
   }
 }
+
+
 /*****************************************************************************************************************************************************
 * NOTES:
 *

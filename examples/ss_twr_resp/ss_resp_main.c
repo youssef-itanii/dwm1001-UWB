@@ -38,6 +38,10 @@ static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE
 
 /* Index to access some of the fields in the frames involved in the process. */
 #define ALL_MSG_SN_IDX 2
+#define RESP_MSG_DST_ID_1 7
+#define RESP_MSG_DST_ID_2 8
+#define TX_MSG_SRC_ID_1 5
+#define TX_MSG_SRC_ID_2 6
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
 #define RESP_MSG_TS_LEN 4	
@@ -271,6 +275,11 @@ static void resp_msg_set_ts(uint8 *ts_field, const uint64 ts)
 void ss_responder_task_function (void * pvParameter)
 {
   UNUSED_PARAMETER(pvParameter);
+  uint8 part_id = dwt_getpartid();
+  rx_poll_msg[RESP_MSG_DST_ID_1] = part_id;
+  tx_resp_msg[TX_MSG_SRC_ID_1] = part_id;
+  printf("part_id: %d\r\n" , part_id);
+  
 
   dwt_setleds(DWT_LEDS_ENABLE);
 

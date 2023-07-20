@@ -52,7 +52,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include "ble.h"
+#include "nRF5_SDK_14.2.0/components/softdevice/s112/headers/ble.h"
 #include "app_util.h"
 
 #ifdef __cplusplus
@@ -84,7 +84,7 @@ extern "C" {
 #define AD_TYPE_MANUF_SPEC_DATA_ID_SIZE    2UL                                 /**< Size (in octets) of the Company Identifier Code, which is a part of the Manufacturer Specific Data AD type. */
 #define AD_TYPE_SERV_DATA_16BIT_UUID_SIZE  2UL                                 /**< Size (in octets) of the 16-bit UUID, which is a part of the Service Data AD type. */
 
-
+#define BLE_GAP_SEC_KEY_LEN 16
 /**@brief Security Manager TK value. */
 typedef struct
 {
