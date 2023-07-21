@@ -104,7 +104,7 @@ static dwt_config_t config = {
 #endif  // #ifdef USE_FREERTOS
 
 int main(void)
-{
+  {
   /* Setup some LEDs for debug Green and Blue on DWM1001-DEV */
   LEDS_CONFIGURE(BSP_LED_0_MASK | BSP_LED_1_MASK);
   LEDS_ON(BSP_LED_0_MASK | BSP_LED_1_MASK);

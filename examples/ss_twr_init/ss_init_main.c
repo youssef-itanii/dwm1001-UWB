@@ -117,7 +117,7 @@ int ss_init_run(void)
   * set by dwt_setrxaftertxdelay() has elapsed. */
   dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
   tx_count++;
-  printf("Transmission # : %d\r\n",tx_count);
+  //printf("Transmission # : %d\r\n",tx_count);
 
 
   /* We assume that the transmission is achieved correctly, poll for reception of a frame or error/timeout. See NOTE 4 below. */
@@ -195,7 +195,11 @@ int ss_init_run(void)
       
         tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
         distance = tof * SPEED_OF_LIGHT;
-        printf("{'ID': %s , 'Data':{'Distance_m' : %f , 'CFO': %d , 'Resp_delay': %d }}\r\n",transmitter_id, distance , cfo , rtd_resp);
+        char hexString[3]; // 2 characters for the hexadecimal digits, and 1 for the null terminator '\0'
+
+     // Convert the uint8 value to a hexadecimal string
+      sprintf(hexString, "%02X", (int)tx_poll_msg[TX_MSG_DST_ID_1]);
+        printf("{'ID': %s , 'Data':{'Distance_m' : %f , 'CFO': %d , 'Resp_delay': %d }}\r\n",hexString, distance , cfo , rtd_resp);
       }
       else {
         isFirstTransmission = false;
