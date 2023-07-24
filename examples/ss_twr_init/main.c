@@ -104,7 +104,7 @@ static void led_toggle_timer_callback (void * pvParameter)
 }
 #else
 
-  extern int ss_init_run(void);
+  extern int ss_init_run(int node_index);
 
 #endif   // #ifdef USE_FREERTOS
 

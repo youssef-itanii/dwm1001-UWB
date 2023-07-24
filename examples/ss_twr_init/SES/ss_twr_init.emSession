@@ -75,21 +75,12 @@
   <Watches active="0" update="Never"/>
  </Watch4>
  <Files>
-  <SessionOpenFile windowGroup="DockEditLeft" x="18" y="151" useTextEdit="1" path="../main.c" left="0" top="135" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="36" y="162" useTextEdit="1" path="../ss_init_main.c" left="0" top="131" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="34" y="145" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/components/device/nrf52.h" left="0" top="102" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="111" useTextEdit="1" path="../main.c" left="0" top="95" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="15" y="290" useTextEdit="1" path="../ss_init_main.c" left="0" selected="1" top="259" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="34" y="145" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/components/device/nrf52.h" left="0" top="105" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="0" y="62" useTextEdit="1" openedFrom="/home/youssef/Desktop/work/dwm1001-examples-master/examples/ss_twr_init/main.c" path="../UART/UART.c" left="0" top="34" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="55" y="65" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/external/segger_rtt/SEGGER_RTT_Syscalls_KEIL.c" left="0" top="57" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="8" y="292" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/components/drivers_nrf/uart/nrf_drv_uart.c" left="0" top="292" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="88" y="3901" useTextEdit="1" path="../../../../../sdk_config.h" left="0" top="3862" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="16" y="61" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/external/fprintf/nrf_fprintf.c" left="0" top="24" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="0" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/components/libraries/strerror/nrf_strerror.c" left="0" top="0" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="27" y="89" useTextEdit="1" path="retarget.c" left="0" top="66" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="3" y="76" useTextEdit="1" path="../../../../dwm1001-driver-master/nRF5_SDK_14.2.0/external/segger_rtt/SEGGER_RTT_Syscalls_SES.c" left="0" top="45" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="21" y="236" useTextEdit="1" path="../../../../dwm1001-driver-master/nRF5_SDK_14.2.0/external/segger_rtt/SEGGER_RTT_printf.c" left="0" top="214" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="131" useTextEdit="1" path="../../../../dwm1001-driver-master/nRF5_SDK_14.2.0/external/segger_rtt/SEGGER_RTT_Syscalls_KEIL.c" left="0" top="113" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="5" y="219" useTextEdit="1" openedFrom="/home/youssef/Desktop/work/dwm1001-UWB/examples/ss_twr_init/main.c" path="../../../deca_driver/port/port_platform.c" left="0" top="284" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="5" y="1002" useTextEdit="1" openedFrom="/home/youssef/Desktop/work/dwm1001-UWB/examples/ss_twr_init/ss_init_main.c" path="../../../deca_driver/deca_device.c" left="0" selected="1" top="991" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="1" y="1009" useTextEdit="1" path="../../../deca_driver/deca_device.c" left="0" top="976" codecName="Default"/>
  </Files>
- <EMStudioWindow activeProject="ss_twr_init" fileDialogDefaultFilter="*.c" autoConnectTarget="J-Link" buildConfiguration="nrf52832_xxaa" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="" debugSearchPath="" autoConnectCapabilities="3199"/>
+ <EMStudioWindow activeProject="ss_twr_init" fileDialogDefaultFilter="*.c" autoConnectTarget="J-Link" buildConfiguration="nrf52832_xxaa" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="" debugSearchPath="" autoConnectCapabilities="3711"/>
 </session>

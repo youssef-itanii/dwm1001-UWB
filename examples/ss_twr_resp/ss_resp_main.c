@@ -92,7 +92,7 @@ static uint64 resp_tx_ts_manual;
 static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
 static volatile bool isFirstTransmission = true;
-static volatile bool normalMode = false;
+static volatile bool normalMode = true;
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -278,7 +278,12 @@ void ss_responder_task_function (void * pvParameter)
   uint8 part_id = dwt_getpartid();
   rx_poll_msg[RESP_MSG_DST_ID_1] = part_id;
   tx_resp_msg[TX_MSG_SRC_ID_1] = part_id;
-  printf("part_id: %d\r\n" , part_id);
+
+          char hexString[3]; // 2 characters for the hexadecimal digits, and 1 for the null terminator '\0'
+        
+     // Convert the uint8 value to a hexadecimal string
+      sprintf(hexString, "%02X",part_id);
+  printf("part_id: %s \r\n" , hexString);
   
 
   dwt_setleds(DWT_LEDS_ENABLE);

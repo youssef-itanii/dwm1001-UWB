@@ -46,6 +46,8 @@ static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
 #define RESP_MSG_TS_LEN 4
+#define NODE_LIMIT 2
+
 /* Frame sequence number, incremented after each transmission. */
 static uint8 frame_seq_nb = 0;
 
@@ -75,14 +77,21 @@ static void resp_msg_get_ts(uint8 *ts_field, uint32 *ts);
 /*Transactions Counters */
 static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
-static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts, prev_tx_ts, prev_rx_ts;
+static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
 static volatile bool isFirstTransmission = true;
-static volatile bool normalMode = false;
+static volatile bool normalMode = true;
 
+/* Struct to store data about the previous packet of each node */
+struct PrevPacket {
+    int expected_sequence_number;
+    uint32_t prev_tx_ts;
+    uint32_t prev_rx_ts;
+    bool is_valid;
+};
 
+struct PrevPacket previous_packets[NODE_LIMIT];
 
-
-void get_transmitter_id(const uint8* buffer , char* id){
+/*void get_transmitter_id(const uint8* buffer , char* id){
       uint32 id_byte_1;
       uint32 id_byte_2;
       resp_msg_get_ts(&rx_buffer[RESP_MSG_SRC_ID_1], &id_byte_1);
@@ -90,7 +99,7 @@ void get_transmitter_id(const uint8* buffer , char* id){
       id[0] = (char)id_byte_1;
       id[1] = (char)id_byte_2;
       id[2] = '\0';
-}
+}*/
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -100,7 +109,7 @@ void get_transmitter_id(const uint8* buffer , char* id){
 *
 * @return none
 */
-int ss_init_run(void)
+int ss_init_run(int node_index)
 {
 
 
@@ -156,14 +165,17 @@ int ss_init_run(void)
     * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
     int seq_num = rx_buffer[ALL_MSG_SN_IDX];
     rx_buffer[ALL_MSG_SN_IDX] = 0;
+    
 
+    /* Check if the sequence number is correct */
+    if(previous_packets[node_index].expected_sequence_number  != seq_num){
+      previous_packets[node_index].is_valid = false;
+
+    }
+    previous_packets[node_index].expected_sequence_number = seq_num+2;
     //if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
     if(sizeof(rx_buffer) == sizeof(rx_resp_msg))
     {	
-
-      /* Get transmitter node's ID */
-      char transmitter_id[3];
-      get_transmitter_id(rx_buffer , transmitter_id );
       rx_count++;
       //printf("Reception # : %d\r\n",rx_count);
 
@@ -173,15 +185,17 @@ int ss_init_run(void)
       /* Retrieve poll transmission and response reception timestamps. See NOTE 5 below. */
       poll_tx_ts = dwt_readtxtimestamplo32();
       resp_rx_ts = dwt_readrxtimestamplo32();
+      
+      /* Perform normally if in normal mode */
       if(normalMode){
-        prev_rx_ts = resp_rx_ts;
-        prev_tx_ts = poll_tx_ts;
+        previous_packets[node_index].prev_rx_ts = resp_rx_ts;
+        previous_packets[node_index].prev_tx_ts = poll_tx_ts;
       }
 
 
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
       /* If this is the first transmission avoid computing anything so we can compute the time in the next transmission */
-      if(!isFirstTransmission || normalMode){
+      if(previous_packets[node_index].is_valid || normalMode){
 
         /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
         int32 cfo = dwt_readcarrierintegrator();
@@ -190,26 +204,25 @@ int ss_init_run(void)
         resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
         resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
 
-        rtd_init = prev_rx_ts - prev_tx_ts;
+        rtd_init = previous_packets[node_index].prev_rx_ts - previous_packets[node_index].prev_tx_ts;
         rtd_resp = resp_tx_ts - poll_rx_ts;
       
         tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
         distance = tof * SPEED_OF_LIGHT;
         char hexString[3]; // 2 characters for the hexadecimal digits, and 1 for the null terminator '\0'
-
+        
      // Convert the uint8 value to a hexadecimal string
       sprintf(hexString, "%02X", (int)tx_poll_msg[TX_MSG_DST_ID_1]);
-        printf("{'ID': %s , 'Data':{'Distance_m' : %f , 'CFO': %d , 'Resp_delay': %d }}\r\n",hexString, distance , cfo , rtd_resp);
+        printf("{\"ID\": \"%s\" , '\"Data\":{\"Distance_m\" : %f , \"CFO\": %d , \"Resp_delay\": %d }}\r\n",hexString, distance , cfo , rtd_resp);
       }
       else {
-        isFirstTransmission = false;
-        printf("First Transmission. \r\n",distance);
+        previous_packets[node_index].is_valid = true;
       }
-            /* Store T0 & T3 to use in the next computation */
+      /* Store the timestamp for rx and tx at responder's side to use in the next computation */
       if(!normalMode){
 
-        prev_rx_ts = resp_rx_ts;
-        prev_tx_ts = poll_tx_ts;
+        previous_packets[node_index].prev_rx_ts = resp_rx_ts;
+        previous_packets[node_index].prev_tx_ts = poll_tx_ts;
       }
     }
   }
@@ -262,17 +275,20 @@ void ss_initiator_task_function (void * pvParameter)
 
   dwt_setleds(DWT_LEDS_ENABLE);
   int ids[2] = {29 , 133};
-  while (true)
+  int limit = 3000;
+  int counter = 0;
+  while (counter < limit)
   {
     for(int i = 0; i < 2; i++){
         uint8 id = ids[i];
         tx_poll_msg[TX_MSG_DST_ID_1] = id;
         rx_resp_msg[RESP_MSG_SRC_ID_1] = id;
-        ss_init_run();
+        ss_init_run(i);
         /* Delay a task for a given number of ticks */
         vTaskDelay(RNG_DELAY_MS);
        /* Tasks must be implemented to never return... */
      }
+     counter++;
   }
 }
 
