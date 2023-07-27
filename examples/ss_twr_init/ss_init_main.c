@@ -187,15 +187,15 @@ int ss_init_run(int node_index)
       resp_rx_ts = dwt_readrxtimestamplo32();
       
       /* Perform normally if in normal mode */
-      if(normalMode){
+      //if(!normalMode){
         previous_packets[node_index].prev_rx_ts = resp_rx_ts;
         previous_packets[node_index].prev_tx_ts = poll_tx_ts;
-      }
+      //}
 
 
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
       /* If this is the first transmission avoid computing anything so we can compute the time in the next transmission */
-      if(previous_packets[node_index].is_valid || normalMode){
+      if(previous_packets[node_index].is_valid || isFirstTransmission || normalMode){
 
         /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
         int32 cfo = dwt_readcarrierintegrator();
@@ -213,10 +213,11 @@ int ss_init_run(int node_index)
         
      // Convert the uint8 value to a hexadecimal string
       sprintf(hexString, "%02X", (int)tx_poll_msg[TX_MSG_DST_ID_1]);
-        printf("{\"ID\": \"%s\" , '\"Data\":{\"Distance_m\" : %f , \"CFO\": %d , \"Resp_delay\": %d }}\r\n",hexString, distance , cfo , rtd_resp);
+        printf("{\"ID\": \"%s\" , \"Data\":{\"Distance_m\" : %f , \"CFO\": %d , \"Resp_delay\": %d }}\r\n",hexString, distance , cfo , rtd_resp);
       }
       else {
         previous_packets[node_index].is_valid = true;
+        isFirstTransmission = false;
       }
       /* Store the timestamp for rx and tx at responder's side to use in the next computation */
       if(!normalMode){
@@ -275,7 +276,7 @@ void ss_initiator_task_function (void * pvParameter)
 
   dwt_setleds(DWT_LEDS_ENABLE);
   int ids[2] = {29 , 133};
-  int limit = 3000;
+  int limit = 6000;
   int counter = 0;
   while (counter < limit)
   {
@@ -290,6 +291,7 @@ void ss_initiator_task_function (void * pvParameter)
      }
      counter++;
   }
+     printf("DONE");
 }
 
 

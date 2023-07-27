@@ -63,6 +63,7 @@
  <Watch1>
   <Watches active="1" update="Never">
    <Watchpoint expression="NRF_SUCCESS" name="NRF_SUCCESS" radix="16" linenumber="65" filename="../UART/UART.c"/>
+   <Watchpoint expression="counter" name="counter" radix="-1" linenumber="292" filename="../ss_init_main.c"/>
   </Watches>
  </Watch1>
  <Watch2>
@@ -75,12 +76,12 @@
   <Watches active="0" update="Never"/>
  </Watch4>
  <Files>
-  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="111" useTextEdit="1" path="../main.c" left="0" top="95" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="15" y="290" useTextEdit="1" path="../ss_init_main.c" left="0" selected="1" top="259" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="20" y="67" useTextEdit="1" path="../main.c" left="0" top="52" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="12" y="32" useTextEdit="1" path="../ss_init_main.c" left="0" selected="1" top="19" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="34" y="145" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/components/device/nrf52.h" left="0" top="105" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="0" y="62" useTextEdit="1" openedFrom="/home/youssef/Desktop/work/dwm1001-examples-master/examples/ss_twr_init/main.c" path="../UART/UART.c" left="0" top="34" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="8" y="292" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/components/drivers_nrf/uart/nrf_drv_uart.c" left="0" top="292" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="1" y="1009" useTextEdit="1" path="../../../deca_driver/deca_device.c" left="0" top="976" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="27" y="597" useTextEdit="1" path="../../../deca_driver/deca_device.c" left="0" top="459" codecName="Default"/>
  </Files>
  <EMStudioWindow activeProject="ss_twr_init" fileDialogDefaultFilter="*.c" autoConnectTarget="J-Link" buildConfiguration="nrf52832_xxaa" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="" debugSearchPath="" autoConnectCapabilities="3711"/>
 </session>
