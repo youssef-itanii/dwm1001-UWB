@@ -31,7 +31,7 @@
 
 /* Frames used in the ranging process. See NOTE 2,3 below. */
 static uint8 rx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
-static uint8 rx_distance_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0 , 0, 0, 0, 0};
+static uint8 rx_delay_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0 , 0, 0, 0, 0, 0, 0, 0, 0};
 static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
@@ -42,7 +42,7 @@ static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
 #define RESP_MSG_TS_LEN 4	
-#define RESP_MSG_DIST_RX_TS_IDX 10
+#define MSG_DIST_TX_RX_IDX 10
 /* Frame sequence number, incremented after each transmission. */
 static uint8 frame_seq_nb = 0;
 
@@ -65,17 +65,20 @@ static uint32 status_reg = 0;
 
 /* This is the delay from the end of the frame transmission to the enable of the receiver, as programmed for the DW1000's wait for response feature. */
 #define RESP_TX_TO_FINAL_RX_DLY_UUS 500
-
+/* Speed of light in air, in metres per second. */
+#define SPEED_OF_LIGHT 299702547
 /* Timestamps of frames transmission/reception.
 * As they are 40-bit wide, we need to define a 64-bit int type to handle them. */
 typedef signed long long int64;
 typedef unsigned long long uint64;
-static uint64 poll_rx_ts;
+
 
 /* Declaration of static functions. */
 //static uint64 get_tx_timestamp_u64(void);
 static uint64 get_rx_timestamp_u64(void);
 static void resp_msg_set_ts(uint8 *ts_field, const uint64 ts);
+static void resp_msg_get_ts(uint8 *ts_field, uint32 *ts);
+static void wait_for_initiator_delay(void);
 //static void final_msg_get_ts(const uint8 *ts_field, uint32 *ts);
 
 /* Timestamps of frames transmission/reception.
@@ -84,51 +87,9 @@ typedef unsigned long long uint64;
 static uint64 poll_rx_ts;
 static uint64 resp_tx_ts;
 
+static double tof;
+static double distance;
 
-static void resp_msg_get_distance(uint8 *ts_field, uint32 *ts)
-{
-  int i;
-  *ts = 0;
-  for (i = 0; i < RESP_MSG_TS_LEN; i++)
-  {
-    *ts += ts_field[i] << (i * 8);
-  }
-}
-
-
-void wait_for_distance(){
-      /* Clear TXFRS event. */
-      dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
-      /* Activate reception immediately. */
-    dwt_rxenable(DWT_START_RX_IMMEDIATE );
-
-  /* Poll for reception of a frame or error/timeout. See NOTE 5 below. */
-    while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
-    {};
-
-    if (status_reg & SYS_STATUS_RXFCG)
-    {
-
-      uint32 frame_len;
-
-      /* Clear good RX frame event in the DW1000 status register. */
-      dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG);
-
-     /* A frame has been received, read it into the local buffer. */
-     frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFL_MASK_1023;
-     if (frame_len <= RX_BUFFER_LEN)
-     {
-        dwt_readrxdata(rx_buffer, frame_len, 0);
-     }
-
-     /* If it is not a poll message, then it must be the message containing the distance */
-    uint32 distance;
-    resp_msg_get_distance(&rx_buffer[RESP_MSG_DIST_RX_TS_IDX] , &distance);
-
-    printf("Distance %d\r\n" , distance);    
-    
-   }
-}
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -216,8 +177,8 @@ int ss_resp_run(void)
       /* Increment frame sequence number after transmission of the poll message (modulo 256). */
       frame_seq_nb++;
       
-      /* Wait for the initator to send the computed distance */
-      wait_for_distance();
+      /* Wait for the initator to send the computed delay */
+      wait_for_initiator_delay();
       }
       else
       {
@@ -290,7 +251,79 @@ static void resp_msg_set_ts(uint8 *ts_field, const uint64 ts)
     ts_field[i] = (ts >> (i * 8)) & 0xFF;
   }
 }
+/*! ------------------------------------------------------------------------------------------------------------------
+* @fn resp_msg_get_ts()
+*
+* @brief Read a given timestamp value from the response message. In the timestamp fields of the response message, the
+*        least significant byte is at the lower address.
+*
+* @param  ts_field  pointer on the first byte of the timestamp field to get
+*         ts  timestamp value
+*
+* @return none
+*/
+static void resp_msg_get_ts(uint8 *ts_field, uint32 *ts)
+{
+  int i;
+  *ts = 0;
+  for (i = 0; i < RESP_MSG_TS_LEN; i++)
+  {
+    *ts += ts_field[i] << (i * 8);
+  }
+}
+/*! ------------------------------------------------------------------------------------------------------------------
+* @fn wait_for_initiator_delay()
+*
+* @brief Wait for the initiator to transmit the relevant data needed for computation
+*
+* @param  none
 
+* @return none
+*/
+void wait_for_initiator_delay(void ){
+  /* Clear TXFRS event. */
+  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
+  /* Activate reception immediately. */
+  dwt_rxenable(DWT_START_RX_IMMEDIATE );
+
+  /* Poll for reception of a frame or error/timeout. See NOTE 5 below. */
+  while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
+  {};
+  frame_seq_nb++;
+  if (status_reg & SYS_STATUS_RXFCG)
+  {
+
+    uint32 frame_len;
+
+    /* Clear good RX frame event in the DW1000 status register. */
+    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG);
+
+    /* A frame has been received, read it into the local buffer. */
+    frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFL_MASK_1023;
+    if (frame_len <= RX_BUFFER_LEN)
+    {
+      dwt_readrxdata(rx_buffer, frame_len, 0);
+    }
+    int32 rx_ts = get_rx_timestamp_u64();
+    /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
+    float clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
+    
+    uint32 initator_tx, initiator_rs;
+   /* Get timestamps embedded in response message. */
+    resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &initiator_rs);
+    resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &initator_tx);
+    
+    int32 rtd_init , rtd_resp;
+
+    rtd_init = initator_tx - initiator_rs;
+    rtd_resp =  dwt_readtxtimestamplo32() - dwt_readrxtimestamplo32();
+
+      tof = ((rtd_resp - rtd_init* (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
+      distance = tof * SPEED_OF_LIGHT;
+    printf("Distance %d\r\n" , distance);    
+
+  }
+}
 
 /**@brief SS TWR Initiator task entry function.
 *
@@ -310,6 +343,10 @@ void ss_responder_task_function (void * pvParameter)
     /* Tasks must be implemented to never return... */
   }
 }
+
+
+
+
 /*****************************************************************************************************************************************************
 * NOTES:
 *
