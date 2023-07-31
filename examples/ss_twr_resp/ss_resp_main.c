@@ -31,7 +31,7 @@
 
 /* Frames used in the ranging process. See NOTE 2,3 below. */
 static uint8 rx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
-static uint8 rx_distance_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0 , 0};
+static uint8 rx_distance_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0 , 0, 0, 0, 0};
 static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
@@ -42,7 +42,7 @@ static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
 #define RESP_MSG_TS_LEN 4	
-
+#define RESP_MSG_DIST_RX_TS_IDX 10
 /* Frame sequence number, incremented after each transmission. */
 static uint8 frame_seq_nb = 0;
 
@@ -85,29 +85,29 @@ static uint64 poll_rx_ts;
 static uint64 resp_tx_ts;
 
 
+static void resp_msg_get_distance(uint8 *ts_field, uint32 *ts)
+{
+  int i;
+  *ts = 0;
+  for (i = 0; i < RESP_MSG_TS_LEN; i++)
+  {
+    *ts += ts_field[i] << (i * 8);
+  }
+}
 
 
 void wait_for_distance(){
       /* Clear TXFRS event. */
       dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
       /* Activate reception immediately. */
-    dwt_rxenable(DWT_START_RX_IMMEDIATE);
+    dwt_rxenable(DWT_START_RX_IMMEDIATE );
 
   /* Poll for reception of a frame or error/timeout. See NOTE 5 below. */
     while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
     {};
 
-    #if 0	  // Include to determine the type of timeout if required.
-    int temp = 0;
-     (frame wait timeout and preamble detect timeout)
-    if(status_reg & SYS_STATUS_RXRFTO )
-    temp =1;
-    else if(status_reg & SYS_STATUS_RXPTO )
-    temp =2;
-    #endif
-
-  if (status_reg & SYS_STATUS_RXFCG)
-  {
+    if (status_reg & SYS_STATUS_RXFCG)
+    {
 
       uint32 frame_len;
 
@@ -122,10 +122,10 @@ void wait_for_distance(){
      }
 
      /* If it is not a poll message, then it must be the message containing the distance */
-    if (memcmp(rx_buffer, rx_poll_msg, ALL_MSG_COMMON_LEN) != 0){
-       rx_buffer[ALL_MSG_SN_IDX] = 0;
-       printf("Distnace: %d\r\n , " , rx_buffer[12]);
-    }
+    uint32 distance;
+    resp_msg_get_distance(&rx_buffer[RESP_MSG_DIST_RX_TS_IDX] , &distance);
+
+    printf("Distance %d\r\n" , distance);    
     
    }
 }
@@ -357,7 +357,7 @@ void ss_responder_task_function (void * pvParameter)
 * 8. In this operation, the high order byte of each 40-bit timestamps is discarded. This is acceptable as those time-stamps are not separated by
 *    more than 2**32 device time units (which is around 67 ms) which means that the calculation of the round-trip delays (needed in the
 *    time-of-flight computation) can be handled by a 32-bit subtraction.
-* 9. dwt_writetxdata() takes the full size of the message as a parameter but only copies (size - 2) bytes as the check-sum at the end of the frame is
+* 9. dwt_writetxdatadwt_writetxdata() takes the full size of the message as a parameter but only copies (size - 2) bytes as the check-sum at the end of the frame is
 *    automatically appended by the DW1000. This means that our variable could be two bytes shorter without losing any data (but the sizeof would not
 *    work anymore then as we would still have to indicate the full length of the frame to dwt_writetxdata()).
 *10. The user is referred to DecaRanging ARM application (distributed with EVK1000 product) for additional practical example of usage, and to the

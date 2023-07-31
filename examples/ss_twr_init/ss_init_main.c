@@ -35,7 +35,7 @@
 
 /* Frames used in the ranging process. See NOTE 1,2 below. */
 static uint8 tx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
-static uint8 tx_distance_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0 , 0};
+static uint8 tx_distance_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0 , 0, 0, 0, 0};
 static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 1 below). */
@@ -45,6 +45,7 @@ static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
 #define RESP_MSG_TS_LEN 4
+#define RESP_MSG_DIST_RX_TS_IDX 10
 /* Frame sequence number, incremented after each transmission. */
 static uint8 frame_seq_nb = 0;
 
@@ -76,6 +77,14 @@ static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
 
 
+static void tx_msg_set_distance(uint8 *ts_field, const uint64 ts)
+{
+  int i;
+  for (i = 0; i < RESP_MSG_TS_LEN; i++)
+  {
+    ts_field[i] = (ts >> (i * 8)) & 0xFF;
+  }
+}
 
 
 
@@ -84,20 +93,47 @@ float convert_to_two_decimal_places(float number){
 }
 
 void transmit_distance(uint8 distance){
-  tx_distance_msg[12] = distance; 
+  tx_distance_msg[ALL_MSG_SN_IDX] = 0;
+  tx_msg_set_distance(&tx_distance_msg[RESP_MSG_DIST_RX_TS_IDX] , distance);
+
+  int ret;
   tx_distance_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
   dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
   dwt_writetxdata(sizeof(tx_distance_msg), tx_distance_msg, 0); /* Zero offset in TX buffer. */
   dwt_writetxfctrl(sizeof(tx_distance_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
+  ret = dwt_starttx(DWT_START_TX_IMMEDIATE);
 
   /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
-  * set by dwt_setrxaftertxdelay() has elapsed. */
-  printf("Distance : %d\r\n",tx_distance_msg[12]);
+ /* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. */
+      if (ret == DWT_SUCCESS)
+      {
+        /* Poll DW1000 until TX frame sent event set. See NOTE 5 below. */
+        while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS))
+        {};
+      
 
-  dwt_starttx(DWT_START_TX_IMMEDIATE);
-  frame_seq_nb++;
+      
+      /* Clear TXFRS event. */
+      dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
+
+      /* Increment frame sequence number after transmission of the poll message (modulo 256). */
+      frame_seq_nb++;
+      }
+      else
+      {
+        /* If we end up in here then we have not succeded in transmitting the packet we sent up.
+        POLL_RX_TO_RESP_TX_DLY_UUS is a critical value for porting to different processors. 
+        For slower platforms where the SPI is at a slower speed or the processor is operating at a lower 
+        frequency (Comparing to STM32F, SPI of 18MHz and Processor internal 72MHz)this value needs to be increased.
+        Knowing the exact time when the responder is going to send its response is vital for time of flight 
+        calculation. The specification of the time of respnse must allow the processor enough time to do its 
+        calculations and put the packet in the Tx buffer. So more time is required for a slower system(processor).
+        */
+
+        /* Reset RX to properly reinitialise LDE operation. */
+        dwt_rxreset();
+      }
 }
-
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
