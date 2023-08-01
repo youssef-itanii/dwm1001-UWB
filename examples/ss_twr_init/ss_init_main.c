@@ -111,8 +111,8 @@ void transmit_delays(){
   dwt_writetxfctrl(sizeof(tx_delay_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
   ret = dwt_starttx(DWT_START_TX_DELAYED);
 
-  /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
- /* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. */
+    /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
+    If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. */
       if (ret == DWT_SUCCESS)
       {
         /* Poll DW1000 until TX frame sent event set. See NOTE 5 below. */
@@ -228,12 +228,13 @@ int ss_init_run(void)
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
       rtd_init = resp_rx_ts - poll_tx_ts;
       rtd_resp = resp_tx_ts - poll_rx_ts;
-
+    printf("RTD_RESP %d :: RTD_INIT %d \r\n" , rtd_resp , rtd_init);
       tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
       distance = tof * SPEED_OF_LIGHT;
       distance = convert_to_two_decimal_places(distance);
-      distance *= 100;
-      uint8 final_distance = distance;
+      //distance *= 100;
+      //uint8 final_distance = distance;
+          printf("Distance %f\r\n" , distance); 
       transmit_delays();
       //transmit_distance(final_distance);
 

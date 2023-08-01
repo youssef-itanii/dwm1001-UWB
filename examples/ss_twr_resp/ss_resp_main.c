@@ -307,6 +307,7 @@ void wait_for_initiator_delay(void ){
     int32 rx_ts = get_rx_timestamp_u64();
     /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
     float clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
+    printf("CFO %f\r\n" , dwt_readcarrierintegrator);
     
     uint32 initator_tx, initiator_rs;
    /* Get timestamps embedded in response message. */
@@ -316,11 +317,12 @@ void wait_for_initiator_delay(void ){
     int32 rtd_init , rtd_resp;
 
     rtd_init = initator_tx - initiator_rs;
-    rtd_resp =  dwt_readtxtimestamplo32() - dwt_readrxtimestamplo32();
+    rtd_resp =  dwt_readrxtimestamplo32() - dwt_readtxtimestamplo32();
+   // printf("RTD_RESP %d :: RTD_INIT %d \r\n" , rtd_resp , rtd_init);
 
       tof = ((rtd_resp - rtd_init* (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
       distance = tof * SPEED_OF_LIGHT;
-    printf("Distance %d\r\n" , distance);    
+    printf("Distance %f\r\n" , distance);    
 
   }
 }
@@ -334,7 +336,6 @@ void ss_responder_task_function (void * pvParameter)
   UNUSED_PARAMETER(pvParameter);
 
   dwt_setleds(DWT_LEDS_ENABLE);
-    printf("JERE");
   while (true)
   {
     ss_resp_run();
