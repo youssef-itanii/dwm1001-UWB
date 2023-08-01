@@ -37,6 +37,7 @@
 static uint8 tx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
 static uint8 tx_delay_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0 , 0, 0, 0, 0 , 0, 0, 0, 0 , 0, 0, 0, 0};
 static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+static uint8 rx_distance_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0};
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 1 below). */
 #define ALL_MSG_COMMON_LEN 10
@@ -73,6 +74,7 @@ static uint64 poll_rx_ts;
 /* Declaration of static functions. */
 static void resp_msg_set_ts(uint8 *ts_field, const uint64 ts);
 static void resp_msg_get_ts(uint8 *ts_field, uint32 *ts);
+static float wait_for_responder_distance(void);
 
 /*Transactions Counters */
 static volatile int tx_count = 0 ; // Successful transmit counter
@@ -228,14 +230,13 @@ int ss_init_run(void)
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
       rtd_init = resp_rx_ts - poll_tx_ts;
       rtd_resp = resp_tx_ts - poll_rx_ts;
-    printf("RTD_RESP %d :: RTD_INIT %d \r\n" , rtd_resp , rtd_init);
+  
       tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
       distance = tof * SPEED_OF_LIGHT;
       distance = convert_to_two_decimal_places(distance);
-      //distance *= 100;
-      //uint8 final_distance = distance;
-          printf("Distance %f\r\n" , distance); 
       transmit_delays();
+      float responder_distance = wait_for_responder_distance();
+      printf("Initiator Distance %f  || Responder Distance %f \r\n" , distance , responder_distance); 
       //transmit_distance(final_distance);
 
     }
@@ -306,6 +307,54 @@ static uint64 get_rx_timestamp_u64(void)
   }
   return ts;
 }
+
+
+
+float wait_for_responder_distance(void){
+/* Clear TXFRS event. */
+ // dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
+  /* Activate reception immediately. */
+  dwt_rxenable(DWT_START_RX_IMMEDIATE );
+
+  /* Poll for reception of a frame or error/timeout. See NOTE 5 below. */
+  while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
+  {};
+ #if 0	  // Include to determine the type of timeout if required.
+    int temp = 0;
+    // (frame wait timeout and preamble detect timeout)
+    if(status_reg & SYS_STATUS_RXRFTO )
+    temp =1;
+    else if(status_reg & SYS_STATUS_RXPTO )
+    temp =2;
+    #endif
+  if (status_reg & SYS_STATUS_RXFCG)
+  {
+
+    uint32 frame_len;
+
+    /* Clear good RX frame event in the DW1000 status register. */
+    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG);
+
+    /* A frame has been received, read it into the local buffer. */
+    frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFL_MASK_1023;
+    if (frame_len <= RX_BUFFER_LEN)
+    {
+      dwt_readrxdata(rx_buffer, frame_len, 0);
+    }
+    rx_buffer[ALL_MSG_SN_IDX] = 0;
+    uint32 distance;
+    resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &distance);
+    return distance/100.0;
+    }
+    return 0;
+  
+}
+
+
+
+
+
+
 /**@brief SS TWR Initiator task entry function.
 *
 * @param[in] pvParameter   Pointer that will be used as the parameter for the task.

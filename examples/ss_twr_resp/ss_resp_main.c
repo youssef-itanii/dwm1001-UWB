@@ -25,7 +25,7 @@
 #include "deca_device_api.h"
 #include "deca_regs.h"
 #include "port_platform.h"
-
+#include <math.h>
 /* Inter-ranging delay period, in milliseconds. See NOTE 1*/
 #define RNG_DELAY_MS 80
 
@@ -33,6 +33,7 @@
 static uint8 rx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
 static uint8 rx_delay_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0 , 0, 0, 0, 0, 0, 0, 0, 0};
 static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+static uint8 tx_distance_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0};
 
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
 #define ALL_MSG_COMMON_LEN 10
@@ -79,6 +80,7 @@ static uint64 get_rx_timestamp_u64(void);
 static void resp_msg_set_ts(uint8 *ts_field, const uint64 ts);
 static void resp_msg_get_ts(uint8 *ts_field, uint32 *ts);
 static void wait_for_initiator_delay(void);
+static void transmit_distance(double distance);
 //static void final_msg_get_ts(const uint8 *ts_field, uint32 *ts);
 
 /* Timestamps of frames transmission/reception.
@@ -289,7 +291,7 @@ void wait_for_initiator_delay(void ){
   /* Poll for reception of a frame or error/timeout. See NOTE 5 below. */
   while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
   {};
-  frame_seq_nb++;
+  //frame_seq_nb++;
   if (status_reg & SYS_STATUS_RXFCG)
   {
 
@@ -307,7 +309,6 @@ void wait_for_initiator_delay(void ){
     int32 rx_ts = get_rx_timestamp_u64();
     /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
     float clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
-    printf("CFO %f\r\n" , dwt_readcarrierintegrator);
     
     uint32 initator_tx, initiator_rs;
    /* Get timestamps embedded in response message. */
@@ -318,13 +319,61 @@ void wait_for_initiator_delay(void ){
 
     rtd_init = initator_tx - initiator_rs;
     rtd_resp =  dwt_readrxtimestamplo32() - dwt_readtxtimestamplo32();
-   // printf("RTD_RESP %d :: RTD_INIT %d \r\n" , rtd_resp , rtd_init);
 
-      tof = ((rtd_resp - rtd_init* (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
-      distance = tof * SPEED_OF_LIGHT;
+    tof = ((rtd_resp - rtd_init* (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
+    distance = tof * SPEED_OF_LIGHT;
     printf("Distance %f\r\n" , distance);    
+    transmit_distance(distance);
 
   }
+}
+
+void transmit_distance(double distance){
+  tx_distance_msg[ALL_MSG_SN_IDX] = 0;
+  distance = round(distance * 100.0)/100.0;
+  distance *= 100;
+  uint8 final_distance = distance;
+  resp_msg_set_ts(&tx_distance_msg[RESP_MSG_POLL_RX_TS_IDX], final_distance);
+
+
+  int ret;
+  tx_distance_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
+  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
+  dwt_writetxdata(sizeof(tx_distance_msg), tx_distance_msg, 0); /* Zero offset in TX buffer. */
+  dwt_writetxfctrl(sizeof(tx_distance_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
+  ret = dwt_starttx(DWT_START_TX_IMMEDIATE);
+
+    /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
+    If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. */
+      if (ret == DWT_SUCCESS)
+      {
+        /* Poll DW1000 until TX frame sent event set. See NOTE 5 below. */
+        while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS))
+        {};
+      
+
+      printf("Distance has been sent\r\n");
+      /* Clear TXFRS event. */
+      dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
+
+      /* Increment frame sequence number after transmission of the poll message (modulo 256). */
+      frame_seq_nb++;
+      }
+      else
+      {
+        /* If we end up in here then we have not succeded in transmitting the packet we sent up.
+        POLL_RX_TO_RESP_TX_DLY_UUS is a critical value for porting to different processors. 
+        For slower platforms where the SPI is at a slower speed or the processor is operating at a lower 
+        frequency (Comparing to STM32F, SPI of 18MHz and Processor internal 72MHz)this value needs to be increased.
+        Knowing the exact time when the responder is going to send its response is vital for time of flight 
+        calculation. The specification of the time of respnse must allow the processor enough time to do its 
+        calculations and put the packet in the Tx buffer. So more time is required for a slower system(processor).
+        */
+
+        /* Reset RX to properly reinitialise LDE operation. */
+        dwt_rxreset();
+      }
+
 }
 
 /**@brief SS TWR Initiator task entry function.
