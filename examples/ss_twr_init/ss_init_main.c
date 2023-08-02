@@ -68,7 +68,7 @@ static uint32 status_reg = 0;
 /* Hold copies of computed time of flight and distance here for reference so that it can be examined at a debug breakpoint. */
 static double tof;
 static double distance;
-static uint64 transmission_delay_ts;
+
 static uint64 resp_tx_ts;
 static uint64 poll_rx_ts;
 /* Declaration of static functions. */
@@ -89,21 +89,22 @@ float convert_to_two_decimal_places(float number){
   return round(number * 100.0)/100.0;
 }
 
-void transmit_delays(){
+void transmit_delays(uint32 rx_ts){
   tx_delay_msg[ALL_MSG_SN_IDX] = 0;
 
   /* Retrieve poll reception timestamp. */
   poll_rx_ts = get_rx_timestamp_u64();
    /* Compute final message transmission time. */
-  transmission_delay_ts = (poll_rx_ts+ (POLL_RX_TO_RESP_TX_DLY_UUS * UUS_TO_DWT_TIME)) >> 8;
+  uint32 transmission_delay_ts = (rx_ts+ (POLL_RX_TO_RESP_TX_DLY_UUS * UUS_TO_DWT_TIME)) >> 8;
   dwt_setdelayedtrxtime(transmission_delay_ts);
     
   /* Response TX timestamp is the transmission time we programmed plus the antenna delay. */
-  resp_tx_ts = (((uint64)(transmission_delay_ts & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
+  uint32 tx_ts = (((uint64)(transmission_delay_ts & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
   
     /* Write all timestamps in the final message. */
-  resp_msg_set_ts(&tx_delay_msg[RESP_MSG_POLL_RX_TS_IDX], poll_rx_ts);
-  resp_msg_set_ts(&tx_delay_msg[RESP_MSG_RESP_TX_TS_IDX], resp_tx_ts);
+  printf("TOF %d\r\n" , tx_ts - rx_ts );
+  resp_msg_set_ts(&tx_delay_msg[RESP_MSG_POLL_RX_TS_IDX], rx_ts);
+  resp_msg_set_ts(&tx_delay_msg[RESP_MSG_RESP_TX_TS_IDX], tx_ts);
 
 
   int ret;
@@ -234,9 +235,10 @@ int ss_init_run(void)
       tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
       distance = tof * SPEED_OF_LIGHT;
       distance = convert_to_two_decimal_places(distance);
-      transmit_delays();
-      float responder_distance = wait_for_responder_distance();
-      printf("Initiator Distance %f  || Responder Distance %f \r\n" , distance , responder_distance); 
+      
+      transmit_delays(resp_rx_ts);
+      //float responder_distance = wait_for_responder_distance();
+      //printf("Initiator Distance %f  || Responder Distance %f \r\n" , distance , responder_distance); 
       //transmit_distance(final_distance);
 
     }

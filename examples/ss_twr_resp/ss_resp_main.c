@@ -180,7 +180,7 @@ int ss_resp_run(void)
       frame_seq_nb++;
       
       /* Wait for the initator to send the computed delay */
-      wait_for_initiator_delay();
+
       }
       else
       {
@@ -322,8 +322,8 @@ void wait_for_initiator_delay(void ){
 
     tof = ((rtd_resp - rtd_init* (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
     distance = tof * SPEED_OF_LIGHT;
-    printf("Distance %f\r\n" , distance);    
-    transmit_distance(distance);
+    printf("TOFF A %f\r\n" , rtd_init);    
+   // transmit_distance(distance);
 
   }
 }
@@ -388,6 +388,7 @@ void ss_responder_task_function (void * pvParameter)
   while (true)
   {
     ss_resp_run();
+    wait_for_initiator_delay();
     /* Delay a task for a given number of ticks */
     vTaskDelay(RNG_DELAY_MS);
     /* Tasks must be implemented to never return... */
