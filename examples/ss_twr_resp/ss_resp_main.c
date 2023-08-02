@@ -31,7 +31,7 @@
 
 /* Frames used in the ranging process. See NOTE 2,3 below. */
 static uint8 rx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
-static uint8 rx_delay_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0 , 0, 0, 0, 0, 0, 0, 0, 0};
+static uint8 rx_delay_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0 , 0, 0, 0, 0};
 static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static uint8 tx_distance_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0};
 
@@ -163,7 +163,6 @@ int ss_resp_run(void)
       dwt_writetxdata(sizeof(tx_resp_msg), tx_resp_msg, 0); /* Zero offset in TX buffer. See Note 5 below.*/
       dwt_writetxfctrl(sizeof(tx_resp_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
       ret = dwt_starttx(DWT_START_TX_DELAYED);
-
       //ret = dwt_starttx(DWT_START_TX_IMMEDIATE);
 
       /* If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. */
@@ -306,23 +305,21 @@ void wait_for_initiator_delay(void ){
     {
       dwt_readrxdata(rx_buffer, frame_len, 0);
     }
-    int32 rx_ts = get_rx_timestamp_u64();
+    int16 rx_ts = get_rx_timestamp_u64();
     /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
     float clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
     
-    uint32 initator_tx, initiator_rs;
+    uint32 initator_delay;
    /* Get timestamps embedded in response message. */
-    resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &initiator_rs);
-    resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &initator_tx);
+    resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &initator_delay);
     
     int32 rtd_init , rtd_resp;
 
-    rtd_init = initator_tx - initiator_rs;
     rtd_resp =  dwt_readrxtimestamplo32() - dwt_readtxtimestamplo32();
 
-    tof = ((rtd_resp - rtd_init* (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
+    tof = ((rtd_resp - initator_delay* (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
     distance = tof * SPEED_OF_LIGHT;
-    printf("TOFF A %f\r\n" , rtd_init);    
+    printf("Distance %f\r\n" , distance);    
    // transmit_distance(distance);
 
   }

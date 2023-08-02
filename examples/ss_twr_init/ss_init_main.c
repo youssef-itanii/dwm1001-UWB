@@ -31,11 +31,11 @@
 #define APP_NAME "SS TWR INIT v1.3"
 
 /* Inter-ranging delay period, in milliseconds. */
-#define RNG_DELAY_MS 100
+#define RNG_DELAY_MS 1000
 
 /* Frames used in the ranging process. See NOTE 1,2 below. */
 static uint8 tx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
-static uint8 tx_delay_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0 , 0, 0, 0, 0 , 0, 0, 0, 0 , 0, 0, 0, 0};
+static uint8 tx_delay_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static uint8 rx_distance_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0};
 
@@ -89,30 +89,33 @@ float convert_to_two_decimal_places(float number){
   return round(number * 100.0)/100.0;
 }
 
-void transmit_delays(uint32 rx_ts){
-  tx_delay_msg[ALL_MSG_SN_IDX] = 0;
+bool transmit_delays(uint32 rx_ts){
 
-  /* Retrieve poll reception timestamp. */
-  poll_rx_ts = get_rx_timestamp_u64();
-   /* Compute final message transmission time. */
-  uint32 transmission_delay_ts = (rx_ts+ (POLL_RX_TO_RESP_TX_DLY_UUS * UUS_TO_DWT_TIME)) >> 8;
-  dwt_setdelayedtrxtime(transmission_delay_ts);
-    
-  /* Response TX timestamp is the transmission time we programmed plus the antenna delay. */
-  uint32 tx_ts = (((uint64)(transmission_delay_ts & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
-  
-    /* Write all timestamps in the final message. */
-  printf("TOF %d\r\n" , tx_ts - rx_ts );
-  resp_msg_set_ts(&tx_delay_msg[RESP_MSG_POLL_RX_TS_IDX], rx_ts);
-  resp_msg_set_ts(&tx_delay_msg[RESP_MSG_RESP_TX_TS_IDX], tx_ts);
-
-
+  /* Write frame data to DW1000 and prepare transmission. See NOTE 3 below. */
   int ret;
   tx_delay_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
   dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
+  
+  /* Compute transmission delay and delay the transmission*/
+  uint32 transmission_delay_ts = (rx_ts+ (POLL_RX_TO_RESP_TX_DLY_UUS * UUS_TO_DWT_TIME)) >> 8;
+  dwt_setdelayedtrxtime(transmission_delay_ts);
+
+  uint32 tx_ts = (((uint64)(transmission_delay_ts & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
+  
+  uint64 delay  = tx_ts - rx_ts;
+  //printf("TOF %lu\r\n" , delay);     
+  resp_msg_set_ts(&tx_delay_msg[RESP_MSG_POLL_RX_TS_IDX], delay);
+          //printf("TX_TS  %f\r\n" , delay);     
+    /*write the delay into the message */
   dwt_writetxdata(sizeof(tx_delay_msg), tx_delay_msg, 0); /* Zero offset in TX buffer. */
   dwt_writetxfctrl(sizeof(tx_delay_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
-  ret = dwt_starttx(DWT_START_TX_DELAYED);
+
+
+  dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
+
+  ret = dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
+  tx_count++;
+  printf("Transmission # (Tramsit delay) : %d\r\n",tx_count);
 
     /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
     If dwt_starttx() returns an error, abandon this ranging exchange and proceed to the next one. */
@@ -122,13 +125,13 @@ void transmit_delays(uint32 rx_ts){
         while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS))
         {};
       
-
       
       /* Clear TXFRS event. */
       dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
 
       /* Increment frame sequence number after transmission of the poll message (modulo 256). */
       frame_seq_nb++;
+      return true;
       }
       else
       {
@@ -144,6 +147,7 @@ void transmit_delays(uint32 rx_ts){
         /* Reset RX to properly reinitialise LDE operation. */
         dwt_rxreset();
       }
+      return false;
 }
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
@@ -171,7 +175,7 @@ int ss_init_run(void)
   * set by dwt_setrxaftertxdelay() has elapsed. */
   dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
   tx_count++;
-  printf("Transmission # : %d\r\n",tx_count);
+  printf("Transmission # (Tramsit poll): %d\r\n",tx_count);
 
 
   /* We assume that the transmission is achieved correctly, poll for reception of a frame or error/timeout. See NOTE 4 below. */
@@ -231,11 +235,10 @@ int ss_init_run(void)
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
       rtd_init = resp_rx_ts - poll_tx_ts;
       rtd_resp = resp_tx_ts - poll_rx_ts;
-  
       tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
       distance = tof * SPEED_OF_LIGHT;
       distance = convert_to_two_decimal_places(distance);
-      
+      return resp_rx_ts;
       transmit_delays(resp_rx_ts);
       //float responder_distance = wait_for_responder_distance();
       //printf("Initiator Distance %f  || Responder Distance %f \r\n" , distance , responder_distance); 
@@ -371,7 +374,9 @@ void ss_initiator_task_function (void * pvParameter)
 
   while (true)
   {
-    ss_init_run();
+    int rx_ts = ss_init_run();
+    //transmit_delays(rx_ts);
+
     /* Delay a task for a given number of ticks */
     vTaskDelay(RNG_DELAY_MS);
     /* Tasks must be implemented to never return... */
