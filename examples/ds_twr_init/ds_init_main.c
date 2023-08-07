@@ -36,7 +36,7 @@
 /* Frames used in the ranging process. See NOTE 1,2 below. */
 static uint8 tx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
 static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-
+static uint8 rx_distance_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0};
 static uint8 rx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE0, 0, 0};
 static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 #define RNG_RESTP_DELAY_MS 80
@@ -161,7 +161,8 @@ int ss_resp_run(void)
       /* Increment frame sequence number after transmission of the poll message (modulo 256). */
       frame_seq_nb++;
       
-
+      float resp_distance = wait_for_responder_distance();
+      printf("{\"Transmission\": %d , \"Data\": {\"D_a_b\": %f , \"D_b_a\": %f}}\r\n" ,tx_count ,  distance ,resp_distance);
       }
       else
       {
@@ -222,7 +223,7 @@ int ss_init_run(void)
   * set by dwt_setrxaftertxdelay() has elapsed. */
   dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
   tx_count++;
-  printf("Transmission # : %d\r\n",tx_count);
+  //printf("Transmission # : %d\r\n",tx_count);
 
 
   /* We assume that the transmission is achieved correctly, poll for reception of a frame or error/timeout. See NOTE 4 below. */
@@ -263,7 +264,7 @@ int ss_init_run(void)
     if (memcmp(rx_buffer, rx_resp_msg, ALL_MSG_COMMON_LEN) == 0)
     {	
       rx_count++;
-      printf("Reception # : %d\r\n",rx_count);
+      //printf("Reception # : %d\r\n",rx_count);
       uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
       int32 rtd_init, rtd_resp;
       float clockOffsetRatio ;
@@ -286,7 +287,7 @@ int ss_init_run(void)
       tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
       distance = tof * SPEED_OF_LIGHT;
       distance = convert_to_two_decimal_places(distance);
-      printf("Distance %f\r\n" , distance); 
+      //printf("Distance %f\r\n" , distance); 
 
     }
   }
@@ -359,7 +360,45 @@ static uint64 get_rx_timestamp_u64(void)
 
 
 
+float wait_for_responder_distance(void){
+/* Clear TXFRS event. */
+ // dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
+  /* Activate reception immediately. */
+  dwt_rxenable(DWT_START_RX_IMMEDIATE );
 
+  /* Poll for reception of a frame or error/timeout. See NOTE 5 below. */
+  while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) & (SYS_STATUS_RXFCG | SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR)))
+  {};
+ #if 0	  // Include to determine the type of timeout if required.
+    int temp = 0;
+    // (frame wait timeout and preamble detect timeout)
+    if(status_reg & SYS_STATUS_RXRFTO )
+    temp =1;
+    else if(status_reg & SYS_STATUS_RXPTO )
+    temp =2;
+    #endif
+  if (status_reg & SYS_STATUS_RXFCG)
+  {
+
+    uint32 frame_len;
+
+    /* Clear good RX frame event in the DW1000 status register. */
+    dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG);
+
+    /* A frame has been received, read it into the local buffer. */
+    frame_len = dwt_read32bitreg(RX_FINFO_ID) & RX_FINFO_RXFL_MASK_1023;
+    if (frame_len <= RX_BUFFER_LEN)
+    {
+      dwt_readrxdata(rx_buffer, frame_len, 0);
+    }
+    rx_buffer[ALL_MSG_SN_IDX] = 0;
+    uint32 distance;
+    resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &distance);
+    return distance/100.0;
+    }
+    return 0;
+  
+}
 
 /**@brief SS TWR Initiator task entry function.
 *
