@@ -59,6 +59,9 @@ static dwt_config_t config = {
 
 //--------------dw1000---end---------------
 
+/*Should be accurately calculated during calibration*/
+#define TX_ANT_DLY 16300
+#define RX_ANT_DLY 16456	
 
 #define TASK_DELAY        10            /**< Task delay. Delays a LED0 task for 200 ms */
 #define TIMER_PERIOD      2000          /**< Timer period. LED1 timer will expire after 1000 ms */

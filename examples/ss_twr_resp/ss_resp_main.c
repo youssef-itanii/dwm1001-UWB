@@ -404,8 +404,8 @@ void ss_responder_task_function (void * pvParameter)
 
 void transmit_distance(double distance){
   tx_distance_msg[ALL_MSG_SN_IDX] = 0;
-  distance = round(distance * 100.0)/100.0;
-  distance *= 100;
+  distance = round(distance * 1000000.0)/1000000.0;
+  distance *= 1000000;
   uint32 final_distance = distance;
   resp_msg_set_ts(&tx_distance_msg[RESP_MSG_POLL_RX_TS_IDX], final_distance);
 

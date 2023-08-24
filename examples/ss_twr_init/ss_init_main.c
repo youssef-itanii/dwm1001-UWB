@@ -83,8 +83,8 @@ static float wait_for_responder_distance(void);
 static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
 static uint64 get_rx_timestamp_u64(void);
-
-
+static int32 rtd_init;
+static float runtime = 0;
 
 int ss_resp_run(void)
 {
@@ -162,7 +162,10 @@ int ss_resp_run(void)
       frame_seq_nb++;
       
       float resp_distance = wait_for_responder_distance();
-      printf("{\"Transmission\": %d , \"Data\": {\"D_a_b\": %f , \"D_b_a\": %f}}\r\n" ,tx_count ,  distance ,resp_distance);
+      printf("{\"Transmission\": %d , \"Data\": {\"D_a_b\": %f , \"D_b_a\": %f, \"Delay_a_b\": %d}}\r\n" ,tx_count ,  distance ,resp_distance  , rtd_init);
+      rtd_init = 0;
+      printf("Time: %d\r\n",runtime *DWT_TIME_UNITS  );
+      runtime = 0;
       }
       else
       {
@@ -266,7 +269,7 @@ int ss_init_run(void)
       rx_count++;
       //printf("Reception # : %d\r\n",rx_count);
       uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
-      int32 rtd_init, rtd_resp;
+      int32 rtd_resp;
       float clockOffsetRatio ;
 
       /* Retrieve poll transmission and response reception timestamps. See NOTE 5 below. */
@@ -283,10 +286,9 @@ int ss_init_run(void)
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
       rtd_init = resp_rx_ts - poll_tx_ts;
       rtd_resp = resp_tx_ts - poll_rx_ts;
-  
+     // runtime += resp_rx_ts;
       tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
       distance = tof * SPEED_OF_LIGHT;
-      distance = convert_to_two_decimal_places(distance);
       //printf("Distance %f\r\n" , distance); 
 
     }
@@ -392,9 +394,10 @@ float wait_for_responder_distance(void){
       dwt_readrxdata(rx_buffer, frame_len, 0);
     }
     rx_buffer[ALL_MSG_SN_IDX] = 0;
-    uint32 distance;
-    resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &distance);
-    return distance/100.0;
+    runtime += get_rx_timestamp_u64();
+    uint32 distance_obtained;
+    resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &distance_obtained);
+    return (double)distance_obtained/1000000.0;
     }
     return 0;
   
