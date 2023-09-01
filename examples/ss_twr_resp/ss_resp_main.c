@@ -36,6 +36,7 @@ static uint8 rx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE
 static uint8 tx_distance_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0};
 static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE,  'W', 'A', 'V', 'E', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+static uint8 tx_resp_data_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 /* Length of the common part of the message (up to and including the function code, see NOTE 3 below). */
 #define ALL_MSG_COMMON_LEN 10
 
@@ -43,6 +44,9 @@ static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE,  'W', 'A', 'V', 'E', 0x
 #define ALL_MSG_SN_IDX 2
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
+#define RESP_MSG_RTD_INIT_IDX 10
+#define RESP_MSG_RTD_RESP_IDX 14
+#define RESP_MSG_RESP_CFO_IDX 18
 #define RESP_MSG_TS_LEN 4	
 #define MSG_DIST_TX_RX_IDX 10
 /* Frame sequence number, incremented after each transmission. */
@@ -82,7 +86,7 @@ static uint64 get_rx_timestamp_u64(void);
 static void resp_msg_set_ts(uint8 *ts_field, const uint64 ts);
 static void resp_msg_get_ts(uint8 *ts_field, uint32 *ts);
 static void wait_for_initiator_delay(void);
-static void transmit_distance(double distance); 
+static void transmit_data(int32 rtd_init , int32 rtd_resp , int32 cfo); 
 //static void final_msg_get_ts(const uint8 *ts_field, uint32 *ts);
                                                           
 /* Timestamps of frames transmission/reception.
@@ -161,7 +165,7 @@ int ss_init_run(void)
       resp_rx_ts = dwt_readrxtimestamplo32();
 
       /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
-      clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
+      //clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
 
       /* Get timestamps embedded in response message. */
       resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
@@ -171,11 +175,11 @@ int ss_init_run(void)
       rtd_init = resp_rx_ts - poll_tx_ts;
       rtd_resp = resp_tx_ts - poll_rx_ts;
   
-      tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
-      distance = tof * SPEED_OF_LIGHT;
+      //tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
+      //distance = tof * SPEED_OF_LIGHT;
       //distance = convert_to_two_decimal_places(distance);
-      printf("Distance %f\r\n" , distance); 
-      transmit_distance(distance);
+      //printf("Distance %f\r\n" , distance); 
+      transmit_data(rtd_init ,rtd_resp ,  dwt_readcarrierintegrator());
 
     }
   }
@@ -402,19 +406,20 @@ void ss_responder_task_function (void * pvParameter)
   }
 }
 
-void transmit_distance(double distance){
-  tx_distance_msg[ALL_MSG_SN_IDX] = 0;
-  distance = round(distance * 1000000.0)/1000000.0;
-  distance *= 1000000;
-  uint32 final_distance = distance;
-  resp_msg_set_ts(&tx_distance_msg[RESP_MSG_POLL_RX_TS_IDX], final_distance);
+void transmit_data(int32 rtd_init , int32 rtd_resp , int32 cfo){
+  tx_resp_data_msg[ALL_MSG_SN_IDX] = 0;
 
+
+
+  resp_msg_set_ts(&tx_resp_data_msg[RESP_MSG_RTD_INIT_IDX], rtd_init);
+  resp_msg_set_ts(&tx_resp_data_msg[RESP_MSG_RTD_RESP_IDX], rtd_resp);
+  resp_msg_set_ts(&tx_resp_data_msg[RESP_MSG_RESP_CFO_IDX], cfo);
 
   int ret;
-  tx_distance_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
+  tx_resp_data_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
   dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
-  dwt_writetxdata(sizeof(tx_distance_msg), tx_distance_msg, 0); /* Zero offset in TX buffer. */
-  dwt_writetxfctrl(sizeof(tx_distance_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
+  dwt_writetxdata(sizeof(tx_resp_data_msg), tx_resp_data_msg, 0); /* Zero offset in TX buffer. */
+  dwt_writetxfctrl(sizeof(tx_resp_data_msg), 0, 1); /* Zero offset in TX buffer, ranging. */
   ret = dwt_starttx(DWT_START_TX_IMMEDIATE);
 
     /* Start transmission, indicating that a response is expected so that reception is enabled automatically after the frame is sent and the delay
@@ -427,7 +432,7 @@ void transmit_distance(double distance){
         {};
       
 
-      printf("Distance has been sent\r\n");
+      printf("Data has been sent\r\n");
       /* Clear TXFRS event. */
       dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
 

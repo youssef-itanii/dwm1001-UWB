@@ -64,8 +64,8 @@
  <Watch1>
   <Watches active="1" update="Never">
    <Watchpoint expression="NRF_SUCCESS" name="NRF_SUCCESS" radix="16" linenumber="65" filename="../UART/UART.c"/>
-   <Watchpoint expression="counter" name="counter" radix="-1" linenumber="452" filename="../ss_init_main.c"/>
-   <Watchpoint expression="status_reg &amp; SYS_STATUS_RXFCG" name="status_reg &amp; SYS_STATUS_RXFCG" radix="16" linenumber="249" filename="../ss_init_main.c"/>
+   <Watchpoint expression="counter" name="counter" radix="-1" linenumber="467" filename="../ss_init_main.c"/>
+   <Watchpoint expression="status_reg &amp; SYS_STATUS_RXFCG" name="status_reg &amp; SYS_STATUS_RXFCG" radix="16" linenumber="263" filename="../ss_init_main.c"/>
   </Watches>
  </Watch1>
  <Watch2>
@@ -78,15 +78,15 @@
   <Watches active="0" update="Never"/>
  </Watch4>
  <Files>
-  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="111" useTextEdit="1" path="../main.c" left="0" top="91" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="50" y="279" useTextEdit="1" path="../ss_init_main.c" left="0" selected="1" top="264" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="111" useTextEdit="1" path="../main.c" left="0" selected="1" top="87" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="13" y="100" useTextEdit="1" path="../ss_init_main.c" left="0" top="75" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="20" y="114" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/components/device/nrf52.h" left="0" top="105" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="9" y="50" useTextEdit="1" openedFrom="/home/youssef/Desktop/work/dwm1001-examples-master/examples/ss_twr_init/main.c" path="../UART/UART.c" left="0" top="10" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="8" y="292" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/components/drivers_nrf/uart/nrf_drv_uart.c" left="0" top="292" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="0" y="1066" useTextEdit="1" path="../../../deca_driver/deca_device.c" left="0" top="1053" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="0" y="2686" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/external/freertos/source/tasks.c" left="0" top="2673" codecName="Default"/>
-  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="104" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/components/toolchain/ses/ses_nrf52_startup.s" left="0" top="64" codecName="Default"/>
+  <SessionOpenFile windowGroup="DockEditLeft" x="0" y="104" useTextEdit="1" path="../../../nRF5_SDK_14.2.0/components/toolchain/ses/ses_nrf52_startup.s" left="0" top="63" codecName="Default"/>
   <SessionOpenFile windowGroup="DockEditLeft" x="51" y="69" useTextEdit="1" openedFrom="/home/youssef/Desktop/work/dwm1001-UWB/examples/ss_twr_init/ss_init_main.c" path="../../../deca_driver/deca_device_api.h" left="0" top="69" codecName="Default"/>
  </Files>
- <EMStudioWindow activeProject="ss_twr_init" fileDialogDefaultFilter="*.c" autoConnectTarget="J-Link" buildConfiguration="nrf52832_xxaa" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="" debugSearchPath="" autoConnectCapabilities="3199"/>
+ <EMStudioWindow activeProject="ss_twr_init" fileDialogDefaultFilter="*.c" autoConnectTarget="J-Link" buildConfiguration="nrf52832_xxaa" sessionSettings="" debugSearchFileMap="" fileDialogInitialDirectory="" debugSearchPath="" autoConnectCapabilities="3711"/>
 </session>

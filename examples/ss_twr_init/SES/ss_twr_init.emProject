@@ -4,7 +4,7 @@
   <configuration Name="Internal" hidden="Yes" />
   <configuration
     Name="nrf52832_xxaa"
-    debug_terminal_log_file="/home/youssef/Work/internship/Summer-internship/monitor.log"
+    debug_terminal_log_file="/home/youssef/Work/internship/Summer-internship/monitor_31_aout.log"
     inherited_configurations="Internal"
     linker_additional_options=""
     linker_printf_fp_enabled="Float"

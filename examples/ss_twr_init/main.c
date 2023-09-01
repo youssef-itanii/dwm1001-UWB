@@ -89,7 +89,7 @@ static void led_toggle_task_function (void * pvParameter)
     LEDS_INVERT(BSP_LED_0_MASK);
     /* Delay a task for a given number of ticks */
     vTaskDelay(TASK_DELAY);
-    /* Tasks must be implemented to never return... */
+    /* Tasks must be implemented to never return... */  
   }
 }
 

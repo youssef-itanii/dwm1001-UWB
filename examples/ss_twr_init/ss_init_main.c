@@ -37,6 +37,7 @@
 static uint8 tx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE0, 0, 0};
 static uint8 rx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static uint8 rx_distance_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0};
+static uint8 rx_resp_data_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 static uint8 rx_poll_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE0, 0, 0};
 static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 #define RNG_RESTP_DELAY_MS 80
@@ -48,6 +49,9 @@ static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E', 0xE
 #define ALL_MSG_SN_IDX 2
 #define RESP_MSG_POLL_RX_TS_IDX 10
 #define RESP_MSG_RESP_TX_TS_IDX 14
+#define RESP_MSG_RTD_INIT_IDX 10
+#define RESP_MSG_RTD_RESP_IDX 14
+#define RESP_MSG_RESP_CFO_IDX 18
 #define RESP_MSG_TS_LEN 4
 #define RESP_MSG_DIST_RX_TS_IDX 10
 /* Frame sequence number, incremented after each transmission. */
@@ -77,14 +81,26 @@ static uint64 poll_rx_ts;
 /* Declaration of static functions. */
 static void resp_msg_set_ts(uint8 *ts_field, const uint64 ts);
 static void resp_msg_get_ts(uint8 *ts_field, uint32 *ts);
-static float wait_for_responder_distance(void);
+static void wait_for_responder_data(int32* repsonder_rtd_init, int32* responder_rtd_resp, int32* responder_cfo);
 
 /*Transactions Counters */
 static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
 static uint64 get_rx_timestamp_u64(void);
 static int32 rtd_init;
+static int32 rtd_resp;
+static int32 cfo;
 static float runtime = 0;
+
+
+double compute_distace(int32 rtd_init_val , int32 rtd_resp_val , int32 cfo_val){
+
+      float clockOffsetRatio = cfo_val * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
+
+      double tof = ((rtd_init_val - rtd_resp_val * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
+      double distance_computed = tof * SPEED_OF_LIGHT;
+      return distance_computed;
+}
 
 int ss_resp_run(void)
 {
@@ -161,11 +177,13 @@ int ss_resp_run(void)
       /* Increment frame sequence number after transmission of the poll message (modulo 256). */
       frame_seq_nb++;
       
-      float resp_distance = wait_for_responder_distance();
-      printf("{\"Transmission\": %d , \"Data\": {\"D_a_b\": %f , \"D_b_a\": %f, \"Delay_a_b\": %d}}\r\n" ,tx_count ,  distance ,resp_distance  , rtd_init);
+      int32 repsonder_rtd_init,responder_rtd_resp,responder_cfo;
+      wait_for_responder_data(&repsonder_rtd_init , &responder_rtd_resp , &responder_cfo);
+      double distance_init = compute_distace(rtd_init , rtd_resp , cfo);
+      double distance_resp = compute_distace(repsonder_rtd_init , responder_rtd_resp , responder_cfo);
+
+      printf("{\"Transmission\": %d , \"Data\": { \"initator\": {  \"distance\": %f ,\"rtd_init\": %d , \"rtd_resp\": %d , \"cfo\": %d} , \"responder\": { \"distance\": %f , \"rtd_init\": %d , \"rtd_resp\": %d , \"cfo\": %d}}}\r\n" , tx_count , distance_init, rtd_init , rtd_resp , cfo , distance_resp, repsonder_rtd_init,responder_rtd_resp,responder_cfo);
       rtd_init = 0;
-      printf("Time: %d\r\n",runtime *DWT_TIME_UNITS  );
-      runtime = 0;
       }
       else
       {
@@ -269,15 +287,16 @@ int ss_init_run(void)
       rx_count++;
       //printf("Reception # : %d\r\n",rx_count);
       uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
-      int32 rtd_resp;
+      
       float clockOffsetRatio ;
-
+      
       /* Retrieve poll transmission and response reception timestamps. See NOTE 5 below. */
       poll_tx_ts = dwt_readtxtimestamplo32();
       resp_rx_ts = dwt_readrxtimestamplo32();
-
+    
       /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
-      clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
+      cfo = dwt_readcarrierintegrator();
+      clockOffsetRatio = cfo * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
 
       /* Get timestamps embedded in response message. */
       resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
@@ -286,7 +305,7 @@ int ss_init_run(void)
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
       rtd_init = resp_rx_ts - poll_tx_ts;
       rtd_resp = resp_tx_ts - poll_rx_ts;
-     // runtime += resp_rx_ts;
+
       tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
       distance = tof * SPEED_OF_LIGHT;
       //printf("Distance %f\r\n" , distance); 
@@ -362,7 +381,7 @@ static uint64 get_rx_timestamp_u64(void)
 
 
 
-float wait_for_responder_distance(void){
+void wait_for_responder_data(int32* repsonder_rtd_init, int32* responder_rtd_resp, int32* responder_cfo){
 /* Clear TXFRS event. */
  // dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS);
   /* Activate reception immediately. */
@@ -394,12 +413,12 @@ float wait_for_responder_distance(void){
       dwt_readrxdata(rx_buffer, frame_len, 0);
     }
     rx_buffer[ALL_MSG_SN_IDX] = 0;
-    runtime += get_rx_timestamp_u64();
     uint32 distance_obtained;
-    resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &distance_obtained);
-    return (double)distance_obtained/1000000.0;
+    resp_msg_get_ts(&rx_buffer[RESP_MSG_RTD_INIT_IDX], repsonder_rtd_init);
+    resp_msg_get_ts(&rx_buffer[RESP_MSG_RTD_RESP_IDX], responder_rtd_resp);
+    resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_CFO_IDX], responder_cfo);
+
     }
-    return 0;
   
 }
 
