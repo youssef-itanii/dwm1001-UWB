@@ -109,7 +109,7 @@ static void led_toggle_timer_callback (void * pvParameter)
 #endif   // #ifdef USE_FREERTOS
 
 int main(void)
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     {
   /* Setup some LEDs for debug Green and Blue on DWM1001-DEV */
   LEDS_CONFIGURE(BSP_LED_0_MASK | BSP_LED_1_MASK | BSP_LED_2_MASK);
   LEDS_ON(BSP_LED_0_MASK | BSP_LED_1_MASK | BSP_LED_2_MASK );

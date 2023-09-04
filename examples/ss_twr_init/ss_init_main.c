@@ -71,9 +71,7 @@ static void resp_msg_get_ts(uint8 *ts_field, uint32 *ts);
 /*Transactions Counters */
 static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
-static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts, prev_tx_ts, prev_rx_ts;
-static volatile bool isFirstTransmission = true;
-static volatile bool normalMode = true;
+static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -142,46 +140,28 @@ int ss_init_run(void)
     {	
       rx_count++;
       printf("Reception # : %d\r\n",rx_count);
-
+      uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
       int32 rtd_init, rtd_resp;
       float clockOffsetRatio ;
 
       /* Retrieve poll transmission and response reception timestamps. See NOTE 5 below. */
       poll_tx_ts = dwt_readtxtimestamplo32();
       resp_rx_ts = dwt_readrxtimestamplo32();
-      if(normalMode){
-        prev_rx_ts = resp_rx_ts;
-        prev_tx_ts = poll_tx_ts;
-      }
 
+      /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
+      clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
+
+      /* Get timestamps embedded in response message. */
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
+      resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
 
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
-      /* If this is the first transmission avoid computing anything so we can compute the time in the next transmission */
-      if(!isFirstTransmission || normalMode){
+      rtd_init = resp_rx_ts - poll_tx_ts;
+      rtd_resp = resp_tx_ts - poll_rx_ts;
 
-        /* Read carrier integrator value and calculate clock offset ratio. See NOTE 7 below. */
-        clockOffsetRatio = dwt_readcarrierintegrator() * (FREQ_OFFSET_MULTIPLIER * HERTZ_TO_PPM_MULTIPLIER_CHAN_5 / 1.0e6) ;
-        /* Get timestamps embedded in response message. */
-        resp_msg_get_ts(&rx_buffer[RESP_MSG_POLL_RX_TS_IDX], &poll_rx_ts);
-        resp_msg_get_ts(&rx_buffer[RESP_MSG_RESP_TX_TS_IDX], &resp_tx_ts);
-
-        rtd_init = prev_rx_ts - prev_tx_ts;
-        rtd_resp = resp_tx_ts - poll_rx_ts;
-      
-        tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
-        distance = tof * SPEED_OF_LIGHT;
-        printf("{Distance : %f}\r\n",distance);
-      }
-      else {
-        isFirstTransmission = false;
-        printf("First Transmission. \r\n",distance);
-      }
-            /* Store T0 & T3 to use in the next computation */
-      if(!normalMode){
-
-        prev_rx_ts = resp_rx_ts;
-        prev_tx_ts = poll_tx_ts;
-      }
+      tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
+      distance = tof * SPEED_OF_LIGHT;
+      printf("Distance : %f\r\n",distance);
     }
   }
   else
