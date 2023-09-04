@@ -72,6 +72,26 @@ static void resp_msg_get_ts(uint8 *ts_field, uint32 *ts);
 static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
 static uint32 poll_tx_ts, resp_rx_ts, poll_rx_ts, resp_tx_ts;
+
+
+/* Struct to store data about the previous packet of each node */
+struct PrevPacket {
+    int expected_sequence_number;
+    uint32_t prev_poll_rx_ts;
+    uint32_t prev_rtd_init;
+    float prev_cfo;
+};
+
+struct PrevPacket previous_packet;
+
+
+void save_data(int32 rtd_init ,uint32 cur_poll_rx_ts , float cfo){
+  previous_packet.prev_poll_rx_ts = cur_poll_rx_ts;
+  previous_packet.prev_rtd_init = rtd_init;
+  previous_packet.prev_cfo = cfo;
+  
+}
+
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -157,11 +177,15 @@ int ss_init_run(void)
 
       /* Compute time of flight and distance, using clock offset ratio to correct for differing local and remote clock rates */
       rtd_init = resp_rx_ts - poll_tx_ts;
-      rtd_resp = resp_tx_ts - poll_rx_ts;
+      if(resp_tx_ts != 0){
+        
+        rtd_resp = resp_tx_ts - previous_packet.prev_poll_rx_ts; 
+        tof = ((previous_packet.prev_rtd_init - rtd_resp * (1.0f - previous_packet.prev_cfo)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
+        distance = tof * SPEED_OF_LIGHT;
+        printf("Distance : %f\r\n",distance);
+      }
+      save_data(rtd_init , poll_rx_ts , clockOffsetRatio);
 
-      tof = ((rtd_init - rtd_resp * (1.0f - clockOffsetRatio)) / 2.0f) * DWT_TIME_UNITS; // Specifying 1.0f and 2.0f are floats to clear warning 
-      distance = tof * SPEED_OF_LIGHT;
-      printf("Distance : %f\r\n",distance);
     }
   }
   else

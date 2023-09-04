@@ -44,7 +44,7 @@ static uint8 tx_resp_msg[] = {0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A', 0xE
 
 /* Frame sequence number, incremented after each transmission. */
 static uint8 frame_seq_nb = 0;
-
+static volatile int expected_frame_seq_nb = 0;
 /* Buffer to store received response message.
 * Its size is adjusted to longest frame that this example code is supposed to handle. */
 #define RX_BUF_LEN 24
@@ -69,8 +69,6 @@ static uint32 status_reg = 0;
 * As they are 40-bit wide, we need to define a 64-bit int type to handle them. */
 typedef signed long long int64;
 typedef unsigned long long uint64;
-static uint64 poll_rx_ts;
-static uint64 rx_ts_current;
 /* Declaration of static functions. */
 //static uint64 get_tx_timestamp_u64(void);
 static uint64 get_rx_timestamp_u64(void);
@@ -81,11 +79,16 @@ static void resp_msg_set_ts(uint8 *ts_field, const uint64 ts);
 * As they are 40-bit wide, we need to define a 64-bit int type to handle them. */
 typedef unsigned long long uint64;
 static uint64 poll_rx_ts;
+static uint64 tx_ts_prev;
+static uint64 rx_ts_current;
+static uint64 poll_rx_ts;
 static uint64 resp_tx_ts;
+static uint64 rx_ts_prev;
 static uint64 resp_tx_ts_manual;
 /*Transactions Counters */
 static volatile int tx_count = 0 ; // Successful transmit counter
 static volatile int rx_count = 0 ; // Successful receive counter 
+static volatile bool is_first_transmission = true;
 /*! ------------------------------------------------------------------------------------------------------------------
 * @fn main()
 *
@@ -131,6 +134,7 @@ int ss_resp_run(void)
 
     /* Check that the frame is a poll sent by "SS TWR initiator" example.
     * As the sequence number field of the frame is not relevant, it is cleared to simplify the validation of the frame. */
+    
     rx_buffer[ALL_MSG_SN_IDX] = 0;
     if (memcmp(rx_buffer, rx_poll_msg, ALL_MSG_COMMON_LEN) == 0)
     {
@@ -146,10 +150,16 @@ int ss_resp_run(void)
 
       /* Response TX timestamp is the transmission time we programmed plus the antenna delay. */
       resp_tx_ts = (((uint64)(resp_tx_time & 0xFFFFFFFEUL)) << 8) + TX_ANT_DLY;
-
+      tx_ts_prev = resp_tx_ts;
+      if(is_first_transmission){
+        is_first_transmission = false;
+        resp_msg_set_ts(&tx_resp_msg[RESP_MSG_RESP_TX_TS_IDX], 0);
+      }
+      else{
+        resp_msg_set_ts(&tx_resp_msg[RESP_MSG_RESP_TX_TS_IDX], tx_ts_prev);
+      }
       /* Write all timestamps in the final message. See NOTE 8 below. */
       resp_msg_set_ts(&tx_resp_msg[RESP_MSG_POLL_RX_TS_IDX], poll_rx_ts);
-      resp_msg_set_ts(&tx_resp_msg[RESP_MSG_RESP_TX_TS_IDX], resp_tx_ts);
 
       /* Write and send the response message. See NOTE 9 below. */
       tx_resp_msg[ALL_MSG_SN_IDX] = frame_seq_nb;
